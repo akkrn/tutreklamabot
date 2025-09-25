@@ -21,8 +21,7 @@ class TextsStore:
             thread = threading.Thread(target=cls._load_texts)
             thread.start()
             thread.join()
-            return cls._texts[key]
-        return DEFAULT_TEXTS.get(key, key)
+        return cls._texts.get(key, DEFAULT_TEXTS.get(key, key))
 
     @classmethod
     def _load_texts(cls):
