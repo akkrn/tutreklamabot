@@ -11,5 +11,6 @@ dependencies = [
     "django-cryptography-5>=2.0.3",
     "psycopg[binary]>=3.2.10",
     "python-dotenv>=1.1.1",
+    "redis>=6.4.0",
     "structlog>=25.4.0",
 ]
