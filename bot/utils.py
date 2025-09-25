@@ -4,9 +4,8 @@ import logging
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import FSInputFile, Message
+from aiogram.types import FSInputFile, Message, InlineKeyboardMarkup
 from aiohttp import ClientOSError
-
 from bot.redis_client import delete_file_id, get_file_id, save_file_id
 
 logger = logging.getLogger(__name__)
@@ -39,6 +38,7 @@ async def send_file(
     user_tg_id: int,
     caption: str,
     above: bool = False,
+    reply_markup: InlineKeyboardMarkup | None = None,
 ) -> Message:
     """Send files to Telegam servers and collect file_id in Redis cache"""
     file_id = await get_file_id(redis_key)
@@ -49,6 +49,7 @@ async def send_file(
                 photo=file_id,
                 caption=caption,
                 show_caption_above_media=above,
+                reply_markup=reply_markup,
             )
             return result
         except TelegramAPIError:
@@ -60,6 +61,7 @@ async def send_file(
             photo=image_from_pc,
             caption=caption,
             show_caption_above_media=above,
+            reply_markup=reply_markup,
         )
         file_id = result.photo[-1].file_id
         await save_file_id(redis_key, file_id)
