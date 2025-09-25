@@ -7,7 +7,7 @@ from aiogram.exceptions import TelegramNetworkError, TelegramBadRequest
 from typing import Callable, Awaitable, Dict, Any
 import structlog
 
-from bot.models import User, Bot, Language
+from bot.models import User
 
 logger = structlog.get_logger(__name__)
 
@@ -15,9 +15,6 @@ current_user: ContextVar[User] = ContextVar("current_user")
 
 
 class CurrentUserMiddleware(BaseMiddleware):
-    def __init__(self, bot_instance: Bot):
-        self.bot_instance = bot_instance
-
     async def __call__(
         self,
         handler: Callable[[Update, Dict[str, Any]], Awaitable[Any]],
@@ -39,7 +36,7 @@ class CurrentUserMiddleware(BaseMiddleware):
 
         # Получение или создание пользователя
         try:
-            user = await User.objects.select_related("language").aget(
+            user = await User.objects.aget(
                 tg_user_id=tg_user.id
             )
         except User.DoesNotExist:
@@ -64,3 +61,20 @@ class CurrentUserMiddleware(BaseMiddleware):
             return await handler(event, data)
         finally:
             current_user.reset(token)
+
+
+ 
+class IgnoreMessageNotModifiedMiddleware:  # При нажатии на кнопку, которая не меняет текст сообщения, игнорируем ошибку, чтобы не засорять логи
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Any],
+        event: TelegramObject,
+        data: Dict[str, Any],
+    ) -> Any:
+        try:
+            return await handler(event, data)
+        except TelegramBadRequest as e:
+            if "message is not modified" in str(e):
+                return
+            raise
+           

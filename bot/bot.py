@@ -1,4 +1,6 @@
 from aiogram import Bot, Dispatcher
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.utils.callback_answer import CallbackAnswerMiddleware
 from aiogram.types import BotCommandScopeDefault, BotCommand
@@ -9,6 +11,7 @@ import structlog
 
 from bot.middlewares import (
     CurrentUserMiddleware,
+    IgnoreMessageNotModifiedMiddleware,
 )
 from bot.handlers import (
     command_handlers,
@@ -45,7 +48,7 @@ async def on_shutdown(bot: Bot):
 
 async def build_bot() -> tuple[Bot, Dispatcher]:
     token = settings.BOT_TOKEN
-    bot = Bot(token=token)
+    bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
 
     redis_client = redis.Redis(
         db=settings.BOT_REDIS_DB,
@@ -64,6 +67,8 @@ async def build_bot() -> tuple[Bot, Dispatcher]:
     dp.include_router(other_handlers.router)
 
     dp.update.middleware(CurrentUserMiddleware())
+    dp.callback_query.middleware(CallbackAnswerMiddleware())
+    dp.callback_query.middleware(IgnoreMessageNotModifiedMiddleware())
 
 
     dp.startup.register(on_startup)
