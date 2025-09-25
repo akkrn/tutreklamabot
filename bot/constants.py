@@ -1,0 +1,1 @@
+MEDIA_FILES_PATH = "mediafiles"
