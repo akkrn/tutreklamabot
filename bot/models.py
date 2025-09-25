@@ -198,3 +198,12 @@ class ChannelNews(models.Model):
             models.Index(fields=["channel"]),
             models.Index(fields=["-created_at", "channel"]),
         ]
+
+class TextTemplate(models.Model):
+    text_key = models.CharField(max_length=100, unique=True, verbose_name="Ключ текста")
+    default_text = models.TextField("Текст по умолчанию")
+    updated = models.DateTimeField("Дата обновления", auto_now=True)
+
+    class Meta:
+        verbose_name = "Шаблон текста"
+        verbose_name_plural = "Шаблоны текста"
