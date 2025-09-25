@@ -6,7 +6,10 @@ authors = [{ name = "Anton Kokorin", email = "ant.kkrn@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "aiogram>=3.22.0",
     "django>=5.2.6",
+    "django-cryptography-5>=2.0.3",
     "psycopg[binary]>=3.2.10",
     "python-dotenv>=1.1.1",
+    "structlog>=25.4.0",
 ]
