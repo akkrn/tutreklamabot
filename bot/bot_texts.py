@@ -1,8 +1,10 @@
-import time
-import structlog
 import threading
-from bot.models import TextTemplate
+import time
+
+import structlog
+
 from bot.default_texts import DEFAULT_TEXTS
+from bot.models import TextTemplate
 from utils.db import check_django_connection
 
 logger = structlog.get_logger(__name__)
@@ -17,7 +19,10 @@ class TextsStore:
     def get(cls, key: str) -> str:
         """Получить текст по ключу для указанного языка"""
         current_time = time.time()
-        if not cls._texts or (current_time - cls._last_load_time) > cls._cache_ttl:
+        if (
+            not cls._texts
+            or (current_time - cls._last_load_time) > cls._cache_ttl
+        ):
             thread = threading.Thread(target=cls._load_texts)
             thread.start()
             thread.join()
@@ -30,9 +35,7 @@ class TextsStore:
         try:
             text_templates = TextTemplate.objects.all()
             for template in text_templates:
-                texts_by_key[template.text_key] = (
-                    template.default_text
-                )
+                texts_by_key[template.text_key] = template.default_text
         except Exception:
             logger.exception("Ошибка загрузки текстов из БД")
 

@@ -2,7 +2,6 @@ import structlog
 from django.db import models
 from django_cryptography.fields import encrypt
 
-
 logger = structlog.getLogger(__name__)
 
 
@@ -16,7 +15,9 @@ class User(models.Model):
         (STATUS_BANNED, "Забанил"),
     ]
 
-    tg_user_id = models.BigIntegerField("ID пользователя в Telegram", unique=True)
+    tg_user_id = models.BigIntegerField(
+        "ID пользователя в Telegram", unique=True
+    )
     tg_chat_id = models.BigIntegerField(
         "ID чата с пользователем в Telegram",
     )
@@ -96,7 +97,9 @@ class UserBot(models.Model):
         (STATUS_ERROR, "Ошибка"),
     ]
 
-    name = models.CharField(max_length=255, help_text="Название аккаунта для удобства")
+    name = models.CharField(
+        max_length=255, help_text="Название аккаунта для удобства"
+    )
     phone = models.CharField(
         max_length=32, unique=True, help_text="Номер телефона аккаунта"
     )
@@ -161,9 +164,7 @@ class UserBot(models.Model):
             super().save(*args, **kwargs)
 
         if not self.session_file or "temp_" in self.session_file:
-            self.session_file = (
-                f"userbot/sessions/{self.id}_{self.phone.replace('+', '')}.session"
-            )
+            self.session_file = f"userbot/sessions/{self.id}_{self.phone.replace('+', '')}.session"
 
         super().save(*args, **kwargs)
 
@@ -237,7 +238,9 @@ class ChannelSubscription(models.Model):
 
 
 class ChannelNews(models.Model):
-    channel = models.ForeignKey(Channel, on_delete=models.CASCADE, related_name="news")
+    channel = models.ForeignKey(
+        Channel, on_delete=models.CASCADE, related_name="news"
+    )
     message_id = models.BigIntegerField()
     message = models.TextField(default="")
     url = models.TextField(null=True, blank=True)
@@ -254,7 +257,9 @@ class ChannelNews(models.Model):
 
 
 class TextTemplate(models.Model):
-    text_key = models.CharField(max_length=100, unique=True, verbose_name="Ключ текста")
+    text_key = models.CharField(
+        max_length=100, unique=True, verbose_name="Ключ текста"
+    )
     default_text = models.TextField("Текст по умолчанию")
     updated = models.DateTimeField("Дата обновления", auto_now=True)
 

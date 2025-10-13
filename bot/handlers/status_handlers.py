@@ -1,9 +1,12 @@
-from django.utils import timezone
-from aiogram import Dispatcher, Router
-from aiogram.filters.chat_member_updated import KICKED, MEMBER, ChatMemberUpdatedFilter
-from aiogram.types import ChatMemberUpdated
+from aiogram import Dispatcher
+from aiogram import Router
+from aiogram.filters.chat_member_updated import KICKED
+from aiogram.filters.chat_member_updated import MEMBER
+from aiogram.filters.chat_member_updated import ChatMemberUpdatedFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
+from aiogram.types import ChatMemberUpdated
+from django.utils import timezone
 
 from bot.middlewares import current_user
 from bot.models import User

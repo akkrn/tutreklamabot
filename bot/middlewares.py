@@ -1,11 +1,14 @@
 from contextvars import ContextVar
-from aiogram import BaseMiddleware
-from aiogram.types import Update, Message, CallbackQuery, TelegramObject
-from aiogram.enums import ChatAction
-from aiogram.exceptions import TelegramNetworkError, TelegramBadRequest
+from typing import Any
+from typing import Awaitable
+from typing import Callable
+from typing import Dict
 
-from typing import Callable, Awaitable, Dict, Any
 import structlog
+from aiogram import BaseMiddleware
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import TelegramObject
+from aiogram.types import Update
 
 from bot.models import User
 
@@ -36,9 +39,7 @@ class CurrentUserMiddleware(BaseMiddleware):
 
         # Получение или создание пользователя
         try:
-            user = await User.objects.aget(
-                tg_user_id=tg_user.id
-            )
+            user = await User.objects.aget(tg_user_id=tg_user.id)
         except User.DoesNotExist:
             user = await User.objects.acreate(
                 tg_user_id=tg_user.id,
@@ -63,7 +64,6 @@ class CurrentUserMiddleware(BaseMiddleware):
             current_user.reset(token)
 
 
- 
 class IgnoreMessageNotModifiedMiddleware:  # При нажатии на кнопку, которая не меняет текст сообщения, игнорируем ошибку, чтобы не засорять логи
     async def __call__(
         self,
@@ -77,4 +77,3 @@ class IgnoreMessageNotModifiedMiddleware:  # При нажатии на кноп
             if "message is not modified" in str(e):
                 return
             raise
-           

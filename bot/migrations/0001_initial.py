@@ -2,11 +2,11 @@
 
 import django.db.models.deletion
 import django_cryptography.fields
-from django.db import migrations, models
+from django.db import migrations
+from django.db import models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = []
@@ -38,7 +38,9 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "username",
-                    models.TextField(blank=True, null=True, verbose_name="Username"),
+                    models.TextField(
+                        blank=True, null=True, verbose_name="Username"
+                    ),
                 ),
                 (
                     "first_name",
@@ -49,7 +51,9 @@ class Migration(migrations.Migration):
                 (
                     "last_name",
                     django_cryptography.fields.encrypt(
-                        models.TextField(blank=True, null=True, verbose_name="Фамилия")
+                        models.TextField(
+                            blank=True, null=True, verbose_name="Фамилия"
+                        )
                     ),
                 ),
                 (

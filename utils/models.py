@@ -1,8 +1,5 @@
-from functools import partial
-
 import structlog
 from django.db import models
-
 
 logger = structlog.getLogger(__name__)
 

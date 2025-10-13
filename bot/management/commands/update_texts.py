@@ -1,16 +1,15 @@
+import structlog
 from django.core.management.base import BaseCommand
 from django.db import transaction
-import structlog
 
-from bot.models import TextTemplate
 from bot.default_texts import DEFAULT_TEXTS
-
+from bot.models import TextTemplate
 
 logger = structlog.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = ("Обновляет переводы: создает новые ключи, удаляет старые")
+    help = "Обновляет переводы: создает новые ключи, удаляет старые"
 
     def handle(self, *args, **options):
         logger.info("Начинаем обновление текстов...")
@@ -47,7 +46,9 @@ class Command(BaseCommand):
                 TextTemplate.objects.bulk_create(
                     templates_to_create, ignore_conflicts=True
                 )
-                logger.info(f"Созданы TextTemplate для ключей: {missing_template_keys}")
+                logger.info(
+                    f"Созданы TextTemplate для ключей: {missing_template_keys}"
+                )
                 return len(missing_template_keys)
             else:
                 logger.info("Нет новых ключей для создания")
@@ -80,4 +81,3 @@ class Command(BaseCommand):
         except Exception as e:
             logger.error(f"Ошибка удаления старых ключей: {e}")
             return 0
-
