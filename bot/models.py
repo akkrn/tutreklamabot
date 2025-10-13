@@ -186,8 +186,6 @@ class ChannelNews(models.Model):
     channel = models.ForeignKey(Channel, on_delete=models.CASCADE, related_name="news")
     message_id = models.BigIntegerField()     
     message = models.TextField(default="")
-    short_message = TruncatingCharField(max_length=150, blank=True) # TODO мне не нравится, что нельзя нормально регулирвоать количетсво символов
-    # Убрать это поле, все равно храним полное
     url = models.TextField(null=True, blank=True)        
     created_at = models.DateTimeField(auto_now_add=True) 
 
