@@ -1,7 +1,7 @@
 [project]
 name = "tutreklama"
 version = "0.1.0"
-description = "Add your description here"
+description = "Telegram bot for tracking advertising posts in channels"
 authors = [{ name = "Anton Kokorin", email = "ant.kkrn@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.13"
@@ -15,3 +15,15 @@ dependencies = [
     "structlog>=25.4.0",
     "telethon>=1.41.2",
 ]
+
+[tool.ruff]
+line-length = 80
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E203", "E501"]  # E203 - whitespace before ':', E501 - line too long
+
+[tool.ruff.lint.isort]
+known-first-party = ["bot", "userbot", "core", "utils"]
+force-single-line = true

@@ -1,14 +1,65 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+*.pyo
+*.pyd
+*.so
+.Python
 build/
 dist/
 wheels/
 *.egg-info
+*.egg
 
 # Virtual environments
-.venv
+.venv/
+venv/
+ENV/
+env/
 
+# Django
+*.log
+*.pot
+*.pyc
+db.sqlite3
+db.sqlite3-journal
+/static/
+/media/
+local_settings.py
+
+# Environment variables
 .env
+.env.local
+.env.*.local
+
+# Telegram sessions
+*.session
+*.session-journal
+userbot/sessions/
+teapp.session*
+
+# IDE
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific
 *dev.py
+uv.lock
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
