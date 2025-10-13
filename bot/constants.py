@@ -1,1 +1,1 @@
-MEDIA_FILES_PATH = "mediafiles"
+MEDIA_FILES_PATH = "bot/mediafiles"
