@@ -2,8 +2,6 @@ import structlog
 from django.db import models
 from django_cryptography.fields import encrypt
 
-from utils.models import TruncatingCharField
-
 
 logger = structlog.getLogger(__name__)
 
@@ -87,13 +85,47 @@ class User(models.Model):
 class UserBot(models.Model):
     """Аккаунт юзербота для подписки на каналы"""
 
+    STATUS_INACTIVE = "inactive"
+    STATUS_AUTHORIZING = "authorizing"
+    STATUS_ACTIVE = "active"
+    STATUS_ERROR = "error"
+    STATUS_CHOICES = [
+        (STATUS_INACTIVE, "Неактивен"),
+        (STATUS_AUTHORIZING, "Авторизуется"),
+        (STATUS_ACTIVE, "Активен"),
+        (STATUS_ERROR, "Ошибка"),
+    ]
+
     name = models.CharField(max_length=255, help_text="Название аккаунта для удобства")
-    phone = models.CharField(max_length=32, unique=True, help_text="Номер телефона аккаунта")
+    phone = models.CharField(
+        max_length=32, unique=True, help_text="Номер телефона аккаунта"
+    )
     api_id = models.IntegerField()
     api_hash = models.CharField(max_length=128)
-    session_file = models.CharField(max_length=255, help_text="Путь к .session (Telethon)")
-    is_active = models.BooleanField(default=False, help_text="Авторизован и готов к работе")
-    max_channels = models.IntegerField(default=500, help_text="Максимум каналов для этого аккаунта")
+    session_file = models.CharField(
+        max_length=255, help_text="Путь к .session (Telethon)", default=""
+    )
+    string_session = encrypt(
+        models.TextField(
+            blank=True, null=True, help_text="String session для авторизации"
+        )
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_INACTIVE,
+        help_text="Статус юзербота",
+    )
+    is_active = models.BooleanField(
+        default=False, help_text="Авторизован и готов к работе"
+    )
+    max_channels = models.IntegerField(
+        default=500, help_text="Максимум каналов для этого аккаунта"
+    )
+    last_error = models.TextField(blank=True, help_text="Последняя ошибка")
+    last_activity = models.DateTimeField(
+        null=True, blank=True, help_text="Последняя активность"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -103,7 +135,7 @@ class UserBot(models.Model):
         verbose_name_plural = "Телеграм аккаунты"
 
     def __str__(self):
-        return f"{self.name} ({self.phone})"
+        return f"{self.name} ({self.phone}) - {self.get_status_display()}"
 
     @property
     def subscribed_channels_count(self):
@@ -114,7 +146,28 @@ class UserBot(models.Model):
     def can_subscribe_more(self):
         """Может ли подписаться на еще каналы"""
         return self.subscribed_channels_count < self.max_channels
-    
+
+    def get_session_path(self):
+        """Возвращает путь к файлу сессии"""
+        if self.session_file:
+            return self.session_file
+        if self.id:
+            return f"userbot/sessions/{self.id}_{self.phone.replace('+', '')}.session"
+        return f"userbot/sessions/temp_{self.phone.replace('+', '')}.session"
+
+    def save(self, *args, **kwargs):
+        """Автоматически устанавливает путь к сессии при сохранении"""
+        if not self.pk:
+            super().save(*args, **kwargs)
+
+        if not self.session_file or "temp_" in self.session_file:
+            self.session_file = (
+                f"userbot/sessions/{self.id}_{self.phone.replace('+', '')}.session"
+            )
+
+        super().save(*args, **kwargs)
+
+
 class Channel(models.Model):
     telegram_id = models.BigIntegerField(unique=True, db_index=True)
     title = models.TextField()
@@ -140,7 +193,6 @@ class Channel(models.Model):
         return f"{self.title} ({self.telegram_id})"
 
 
-
 class ChannelUser(models.Model):
     """Связь пользователь-канал (какие каналы пользователь хочет отслеживать)"""
 
@@ -157,13 +209,15 @@ class ChannelUser(models.Model):
 class ChannelSubscription(models.Model):
     """Связь канал-юзербот (какой юзербот подписан на какой канал)"""
 
-    channel = models.ForeignKey(Channel, on_delete=models.CASCADE, related_name="subscriptions")
-    userbot = models.ForeignKey(
-        UserBot,
-        on_delete=models.CASCADE,
-        related_name="channel_subscriptions"
+    channel = models.ForeignKey(
+        Channel, on_delete=models.CASCADE, related_name="subscriptions"
     )
-    is_subscribed = models.BooleanField(default=False, help_text="Успешно ли подписался")
+    userbot = models.ForeignKey(
+        UserBot, on_delete=models.CASCADE, related_name="channel_subscriptions"
+    )
+    is_subscribed = models.BooleanField(
+        default=False, help_text="Успешно ли подписался"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -184,10 +238,10 @@ class ChannelSubscription(models.Model):
 
 class ChannelNews(models.Model):
     channel = models.ForeignKey(Channel, on_delete=models.CASCADE, related_name="news")
-    message_id = models.BigIntegerField()     
+    message_id = models.BigIntegerField()
     message = models.TextField(default="")
-    url = models.TextField(null=True, blank=True)        
-    created_at = models.DateTimeField(auto_now_add=True) 
+    url = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = "Сообщение из канала"
@@ -197,6 +251,7 @@ class ChannelNews(models.Model):
             models.Index(fields=["channel"]),
             models.Index(fields=["-created_at", "channel"]),
         ]
+
 
 class TextTemplate(models.Model):
     text_key = models.CharField(max_length=100, unique=True, verbose_name="Ключ текста")
