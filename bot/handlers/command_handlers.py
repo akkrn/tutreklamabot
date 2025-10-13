@@ -1,20 +1,32 @@
-import asyncio
 import base64
-import structlog
+import uuid
 from datetime import timedelta
 
+import structlog
+from aiogram import F
+from aiogram import Router
+from aiogram.filters import CommandObject
+from aiogram.filters import CommandStart
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery
+from aiogram.types import Message
 from asgiref.sync import sync_to_async
 from django.utils import timezone
-from aiogram import Router, F
-from aiogram.filters import CommandObject, CommandStart
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery
 
-from bot.handlers.helpers import get_menu, send_image_message, generate_digest_text
-from bot.keyboards import add_channels_kb, search_channels_kb, user_channels_kb, back_to_menu_kb
+from bot.handlers.helpers import generate_digest_text
+from bot.handlers.helpers import get_menu
+from bot.handlers.helpers import send_image_message
+from bot.keyboards import add_channels_kb
+from bot.keyboards import back_to_menu_kb
+from bot.keyboards import user_channels_kb
 from bot.middlewares import current_user
-from bot.models import User, Channel
-from bot.translations import get_translation
+from bot.models import Channel
+from bot.models import User
+from bot.utils.link_parser import parse_channel_links
+from core.event_manager import EventType
+from core.event_manager import event_manager
+from userbot.redis_messages import ChannelResult
+from userbot.redis_messages import SubscribeChannelsMessage
 
 router = Router()
 logger = structlog.getLogger(__name__)
@@ -34,28 +46,21 @@ async def start(message: Message, state: FSMContext, command: CommandObject):
             message=message,
             image_name="add_channels",
             caption="",
-            keyboard=add_channels_kb()
+            keyboard=add_channels_kb(),
         )
     else:
         await get_menu(message, state)
+
 
 @router.callback_query(F.data == "add_channels_btn")
 async def handle_add_channels(callback: CallbackQuery, state: FSMContext):
     await send_image_message(
         message=callback.message,
         image_name="search",
-        caption="",
-        keyboard=search_channels_kb(),
-        edit_message=True
-    ) 
-
-
-@router.callback_query(F.data == "search_channels_btn")
-async def handle_search_channels(callback: CallbackQuery, state: FSMContext):
-    """Хендлер кнопки 'Поиск каналов'"""
-    # Пока заглушка - позже здесь будет логика поиска каналов пользователя
-    # TODO изменить логику на получение списка каналов пользователя
-    await get_menu(callback.message, state, is_from_callback=True)
+        caption="Отправьте ссылку на канал или несколько ссылок (каждую с новой строки)",
+        keyboard=back_to_menu_kb(),
+        edit_message=True,
+    )
 
 
 @router.callback_query(F.data == "main_menu_btn")
@@ -72,7 +77,7 @@ async def handle_my_channels(callback: CallbackQuery, state: FSMContext):
 
     if user_channels_count == 0:
         caption = "У вас пока нет добавленных каналов."
-        keyboard = search_channels_kb()
+        keyboard = add_channels_kb()
     else:
         caption = "Для удаления канала — нажмите на него."
         channels = await sync_to_async(list)(user.channels.all())
@@ -83,7 +88,7 @@ async def handle_my_channels(callback: CallbackQuery, state: FSMContext):
         image_name="channels",
         caption=caption,
         keyboard=keyboard,
-        edit_message=True
+        edit_message=True,
     )
 
 
@@ -96,8 +101,8 @@ async def handle_digest(callback: CallbackQuery, state: FSMContext):
         message=callback.message,
         image_name="digest",
         caption=digest_caption,
-        keyboard=back_to_menu_kb(), 
-        edit_message=True
+        keyboard=back_to_menu_kb(),
+        edit_message=True,
     )
 
 
@@ -108,13 +113,46 @@ async def handle_support(callback: CallbackQuery, state: FSMContext):
         message=callback.message,
         image_name="support",
         caption="",
-        keyboard=search_channels_kb(), 
-        edit_message=True
+        keyboard=back_to_menu_kb(),
+        edit_message=True,
     )
 
 
+@router.message()
+async def handle_channel_links(message: Message, state: FSMContext):
+    """Обработчик ссылок на каналы от пользователя"""
+    if not message.text:
+        await message.answer(
+            "Отправьте текстовое сообщение со ссылками на каналы."
+        )
+        return
+
+    channel_links = parse_channel_links(message.text)
+    if not channel_links:
+        await message.answer(
+            "Не удалось найти валидные ссылки на каналы.\n\n"
+            "Поддерживаемые форматы:\n"
+            "• t.me/channel_name\n"
+            "• @channel_name\n"
+            "• https://t.me/channel_name"
+        )
+        return
+
+    await state.update_data(channel_links=channel_links)
+
+    await message.answer(
+        f"Найдено каналов для добавления: {len(channel_links)}\n"
+        f"Проверяем доступность и подписываемся..."
+    )
+
+    # Обработка ссылок через userbot
+    await process_channel_subscription(message, state, channel_links)
+
+
 @router.callback_query(F.data.startswith("unsubscribe_"))
-async def handle_unsubscribe_channel(callback: CallbackQuery, state: FSMContext):
+async def handle_unsubscribe_channel(
+    callback: CallbackQuery, state: FSMContext
+):
     """Хендлер отписки от канала"""
     channel_id = int(callback.data.split("_")[1])
     user = current_user.get()
@@ -122,12 +160,14 @@ async def handle_unsubscribe_channel(callback: CallbackQuery, state: FSMContext)
     try:
         channel = await Channel.objects.aget(id=channel_id)
         await user.channels.aremove(channel)
-        logger.info(f"Пользователь {user.tg_user_id} отписался от канала {channel.title}")
+        logger.info(
+            f"Пользователь {user.tg_user_id} отписался от канала {channel.title}"
+        )
         await handle_my_channels(callback, state)
 
     except Channel.DoesNotExist:
         logger.error(f"Канал с ID {channel_id} не найден")
-    
+
 
 def decode_ref_id(value: str) -> int | None:
     try:
@@ -151,9 +191,7 @@ async def handle_start_referrals(message: Message, user, args: str) -> None:
         if not ref_id or ref_id == user.tg_user_id:
             return
 
-        ref_user = await User.objects.filter(
-            tg_user_id=ref_id
-        ).afirst()
+        ref_user = await User.objects.filter(tg_user_id=ref_id).afirst()
         if ref_user:
             user.referrer = ref_user
             logger.info(
@@ -172,3 +210,149 @@ async def handle_start_referrals(message: Message, user, args: str) -> None:
                 ref_user=ref_user,
             )
 
+
+async def process_channel_subscription(
+    message: Message, state: FSMContext, channel_links: list[str]
+):
+    """Отправляет запрос на подписку через Redis и обрабатывает ответ"""
+    user = current_user.get()
+
+    request_id = str(uuid.uuid4())
+    subscribe_request = SubscribeChannelsMessage(
+        request_id=request_id,
+        user_id=user.tg_user_id,
+        channel_links=channel_links,
+    )
+
+    try:
+        await event_manager.publish_event(
+            EventType.SUBSCRIBE_CHANNELS, subscribe_request, "userbot:subscribe"
+        )
+
+        response = await event_manager.wait_for_response(request_id, timeout=60)
+
+        if not response:
+            logger.error("Таймаут ожидания ответа от userbot")
+            await message.answer("Что-то пошло не так. Попробуйте еще раз.")
+            return
+
+        if not response.success:
+            logger.error(
+                f"Ошибка при обработке каналов: {response.error_message}"
+            )
+            await message.answer("Что-то пошло не так. Попробуйте еще раз.")
+            return
+
+        successful_channels = []
+        failed_channels = []
+
+        for result_data in response.results:
+            result = ChannelResult(**result_data)
+
+            if result.success and result.telegram_id and result.title:
+                channel, created = await Channel.objects.aget_or_create(
+                    telegram_id=result.telegram_id,
+                    defaults={
+                        "title": result.title,
+                        "main_username": result.username,
+                        "link_subscription": result.link,
+                    },
+                )
+
+                if not created:
+                    channel.title = result.title
+                    channel.main_username = result.username
+                    channel.link_subscription = result.link
+                    await channel.asave()
+
+                await sync_to_async(user.channels.add)(channel)
+                successful_channels.append(result.title)
+
+                logger.info(
+                    f"Пользователь {user.tg_user_id} подписался на канал {result.title}",
+                    channel_created=created,
+                )
+            else:
+                failed_channels.append(
+                    f"• {result.link} - {result.error_message or 'неизвестная ошибка'}"
+                )
+
+        if len(successful_channels) == 1 and len(failed_channels) == 0:
+            caption = f"Канал *{successful_channels[0]}* успешно добавлен!"
+            await send_image_message(
+                message=message,
+                image_name="one_add",
+                caption=caption,
+                keyboard=back_to_menu_kb(),
+            )
+        elif len(successful_channels) > 1:
+            caption = f"Успешно добавлено каналов: {len(successful_channels)}"
+            if failed_channels:
+                caption += f"\nНе удалось добавить: {len(failed_channels)}"
+            await send_image_message(
+                message=message,
+                image_name="many_done",
+                caption=caption,
+                keyboard=back_to_menu_kb(),
+            )
+        else:
+            caption = "Не удалось добавить каналы:\n" + "\n".join(
+                failed_channels
+            )
+            await send_image_message(
+                message=message,
+                image_name="add_channels",
+                caption=caption,
+                keyboard=add_channels_kb(),
+            )
+            return
+
+    except Exception as e:
+        logger.error(
+            f"Ошибка при обработке каналов через Redis: {e}", exc_info=True
+        )
+        await send_image_message(
+            message=message,
+            image_name="add_channels",
+            caption="Произошла ошибка при добавлении каналов. Попробуйте еще раз.",
+            keyboard=add_channels_kb(),
+        )
+        return
+
+    await get_menu(message, state)
+
+
+@router.message()
+async def handle_channel_selection(message: Message, state: FSMContext):
+    """Обработчик выбора канала через кнопку поиска или ввода ссылок"""
+    channel_info = None
+
+    if message.chat_shared:
+        channel_info = message.chat_shared.username
+        if not channel_info:
+            channel_info = f"@{message.chat_shared.chat_id}"
+    elif message.forward_from_chat and message.forward_from_chat.username:
+        channel_info = message.forward_from_chat.username
+    elif message.text:
+        channel_info = message.text
+
+    if not channel_info:
+        await message.answer(
+            "🌝 К сожалению, через поиск нельзя добавлять приватные каналы. Но это можно сделать вручную."
+        )
+        return
+
+    try:
+        channel_links = parse_channel_links(channel_info)
+
+        if not channel_links:
+            await message.answer(
+                "❌ Не удалось распознать ссылки на каналы. Проверьте формат ссылок."
+            )
+            return
+
+        await process_channel_subscription(message, state, channel_links)
+
+    except Exception as e:
+        logger.error(f"Ошибка при обработке канала {channel_info}: {e}")
+        await message.answer(f"❌ Ошибка при добавлении канала: {e}")

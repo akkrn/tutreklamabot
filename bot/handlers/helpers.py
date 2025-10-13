@@ -1,14 +1,16 @@
-import structlog
-from pathlib import Path
 import base64
-from datetime import timedelta
 from collections import defaultdict
+from datetime import timedelta
+from pathlib import Path
 
+import structlog
 from aiogram import Bot
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery
-from aiogram.types import InlineKeyboardMarkup, InputMediaPhoto
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery
+from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InputMediaPhoto
+from aiogram.types import Message
 from django.conf import settings
 from django.utils import timezone
 
@@ -17,9 +19,9 @@ from bot.keyboards import menu_kb
 from bot.middlewares import current_user
 from bot.models import ChannelNews
 from bot.redis_client import get_file_id
+from bot.tools import send_file
+from bot.tools import truncate_text
 from bot.translations import get_translation
-from bot.tools import send_file, truncate_text
-
 
 logger = structlog.getLogger(__name__)
 
@@ -54,9 +56,7 @@ async def get_menu(
     if new_msg_text_key:
         caption = get_translation(new_msg_text_key)
     else:
-        caption = (
-            f"Пользователь: [{username}]({user_link})\n\nПригласить друга: {ref_link}"
-        )
+        caption = f"Пользователь: [{username}]({user_link})\n\nПригласить друга: {ref_link}"
 
     if is_from_callback:
         result = await send_image_message(
@@ -82,7 +82,9 @@ async def get_menu(
         )
         if result:
             if prev_menu_id and prev_menu_id != result.message_id:
-                await safe_delete_message(message.bot, message.chat.id, prev_menu_id)
+                await safe_delete_message(
+                    message.bot, message.chat.id, prev_menu_id
+                )
             await state.update_data(menu_msg_id=result.message_id)
 
 
@@ -93,7 +95,9 @@ async def safe_delete_message(bot: Bot, chat_id: int, message_id: int) -> None:
         pass
 
 
-async def safe_remove_keyboard(callback: CallbackQuery, state: FSMContext) -> None:
+async def safe_remove_keyboard(
+    callback: CallbackQuery, state: FSMContext
+) -> None:
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except TelegramBadRequest:
@@ -167,7 +171,9 @@ async def send_image_message(
                     reply_markup=keyboard,
                 )
                 try:
-                    await bot.delete_message(message.chat.id, message.message_id)
+                    await bot.delete_message(
+                        message.chat.id, message.message_id
+                    )
                 except TelegramBadRequest:
                     pass
                 return result
@@ -220,7 +226,9 @@ async def generate_digest_text() -> str:
 
     channels_news = defaultdict(list)
     user_news = (
-        ChannelNews.objects.filter(channel__users=user, created_at__gte=yesterday)
+        ChannelNews.objects.filter(
+            channel__users=user, created_at__gte=yesterday
+        )
         .select_related("channel")
         .order_by("-created_at")
     )
@@ -244,11 +252,18 @@ async def generate_digest_text() -> str:
         for news in news_list:
             truncated = truncate_text(news.message or "")
             news_line = f"· {truncated}\n"
-            post_link = f"{channel_link}/{news.message_id}" if channel_link else None
-            news_link = f"[Перейти к посту →]({post_link})" if post_link else None
+            post_link = (
+                f"{channel_link}/{news.message_id}" if channel_link else None
+            )
+            news_link = (
+                f"[Перейти к посту →]({post_link})" if post_link else None
+            )
             news_block = news_line + (news_link or "")
 
-            if current_length + len(channel_block) + len(news_block) + 1 > max_length:
+            if (
+                current_length + len(channel_block) + len(news_block) + 1
+                > max_length
+            ):
                 break
 
             channel_block += news_block

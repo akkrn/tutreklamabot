@@ -1,23 +1,23 @@
-from aiogram import Bot, Dispatcher
-from aiogram.enums import ParseMode
-from aiogram.client.default import DefaultBotProperties
-from aiogram.fsm.storage.redis import RedisStorage
-from aiogram.utils.callback_answer import CallbackAnswerMiddleware
-from aiogram.types import BotCommandScopeDefault, BotCommand
-
-from django.conf import settings
 import redis.asyncio as redis
 import structlog
+from aiogram import Bot
+from aiogram import Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.fsm.storage.redis import RedisStorage
+from aiogram.types import BotCommand
+from aiogram.types import BotCommandScopeDefault
+from aiogram.utils.callback_answer import CallbackAnswerMiddleware
+from django.conf import settings
 
-from bot.middlewares import (
-    CurrentUserMiddleware,
-    IgnoreMessageNotModifiedMiddleware,
-)
-from bot.handlers import (
-    command_handlers,
-    status_handlers,
-    other_handlers,
-)
+from bot.ad_notification_handler import AdNotificationHandler
+from bot.handlers import command_handlers
+from bot.handlers import other_handlers
+from bot.handlers import status_handlers
+from bot.middlewares import CurrentUserMiddleware
+from bot.middlewares import IgnoreMessageNotModifiedMiddleware
+from core.event_manager import EventType
+from core.event_manager import event_manager
 
 logger = structlog.getLogger(__name__)
 
@@ -38,9 +38,26 @@ async def on_startup(bot: Bot):
     )
     await bot.set_my_commands(COMMANDS_EN, scope=BotCommandScopeDefault())
 
+    global ad_handler
+    ad_handler = AdNotificationHandler(bot)
+
+    event_manager.register_handler(
+        EventType.NEW_AD_MESSAGE, ad_handler.handle_new_ad, "bot:new_ad"
+    )
+
+    await event_manager.start_listening()
+    logger.info("Запущен обработчик уведомлений о рекламе")
+
 
 async def on_shutdown(bot: Bot):
     logger.info("Завершение работы бота...")
+
+    # Отключаем обработчик уведомлений
+    global ad_handler
+    if "ad_handler" in globals():
+        await event_manager.stop_listening()
+        logger.info("Обработчик уведомлений о рекламе отключен")
+
     # await bot.session.close()
     # await redis.Redis(db=1).close()
     # logger.info("Redis connection closed")
@@ -48,7 +65,9 @@ async def on_shutdown(bot: Bot):
 
 async def build_bot() -> tuple[Bot, Dispatcher]:
     token = settings.BOT_TOKEN
-    bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
+    bot = Bot(
+        token=token, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN)
+    )
 
     redis_client = redis.Redis(
         db=settings.BOT_REDIS_DB,
@@ -69,7 +88,6 @@ async def build_bot() -> tuple[Bot, Dispatcher]:
     dp.update.middleware(CurrentUserMiddleware())
     dp.callback_query.middleware(CallbackAnswerMiddleware())
     dp.callback_query.middleware(IgnoreMessageNotModifiedMiddleware())
-
 
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)

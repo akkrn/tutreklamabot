@@ -3,9 +3,14 @@ import logging
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import FSInputFile, Message, InlineKeyboardMarkup
+from aiogram.types import FSInputFile
+from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import Message
 from aiohttp import ClientOSError
-from bot.redis_client import delete_file_id, get_file_id, save_file_id
+
+from bot.redis_client import delete_file_id
+from bot.redis_client import get_file_id
+from bot.redis_client import save_file_id
 
 logger = logging.getLogger(__name__)
 
