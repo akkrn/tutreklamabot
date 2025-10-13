@@ -1,0 +1,133 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{% url 'admin:bot_userbot_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+
+<div class="module aligned">
+    <h2>Информация о юзерботе</h2>
+    <div class="form-row">
+        <div><strong>Название:</strong> {{ userbot.name }}</div>
+        <div><strong>Телефон:</strong> {{ userbot.phone }}</div>
+        <div><strong>Статус:</strong> {{ userbot.get_status_display }}</div>
+        {% if userbot.last_error %}
+        <div><strong>Последняя ошибка:</strong> <span style="color: red;">{{ userbot.last_error }}</span></div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="module aligned">
+    <h2>Авторизация</h2>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="form-row">
+            <div>
+                <label for="{{ form.phone.id_for_label }}">{{ form.phone.label }}:</label>
+                {{ form.phone }}
+                {% if form.phone.errors %}
+                <ul class="errorlist">
+                    {% for error in form.phone.errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                <p class="help">Введите номер телефона в международном формате (например: +79123456789)</p>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div>
+                <label for="{{ form.code.id_for_label }}">{{ form.code.label }}:</label>
+                {{ form.code }}
+                {% if form.code.errors %}
+                <ul class="errorlist">
+                    {% for error in form.code.errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                <p class="help">Введите код подтверждения из Telegram (если уже отправлен)</p>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div>
+                <label for="{{ form.password.id_for_label }}">{{ form.password.label }}:</label>
+                {{ form.password }}
+                {% if form.password.errors %}
+                <ul class="errorlist">
+                    {% for error in form.password.errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                <p class="help">Пароль 2FA (если включен). Введите пароль, если система запросила его после ввода кода.
+                </p>
+            </div>
+        </div>
+
+        <div class="submit-row">
+            <input type="submit" value="Отправить код" class="default" name="send_code">
+            <input type="submit" value="Проверить код" class="default" name="verify_code">
+            <a href="{% url 'admin:bot_userbot_changelist' %}" class="button">Отмена</a>
+        </div>
+    </form>
+</div>
+
+<div class="module aligned">
+    <h2>Инструкция</h2>
+    <ol>
+        <li>Убедитесь, что номер телефона указан правильно</li>
+        <li>Нажмите "Отправить код" - код придет в Telegram</li>
+        <li>Введите полученный код и нажмите "Проверить код"</li>
+        <li>Если включен 2FA, введите пароль</li>
+        <li>После успешной авторизации юзербот будет готов к работе</li>
+    </ol>
+</div>
+
+<style>
+    .alert {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+    }
+
+    .alert-success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+
+    .alert-error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+
+    .alert-warning {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+    }
+</style>
+{% endblock %}
