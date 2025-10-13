@@ -1,13 +1,12 @@
 import asyncio
 
-from aiogram import Dispatcher, Bot
-from django.core.management.base import BaseCommand
 import structlog
-
+from aiogram import Bot
+from aiogram import Dispatcher
+from django.core.management.base import BaseCommand
 
 from bot import bot_texts
 from bot.bot import build_bot
-
 
 logger = structlog.getLogger(__name__)
 
