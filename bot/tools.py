@@ -1,4 +1,3 @@
-
 import asyncio
 import logging
 
@@ -9,6 +8,18 @@ from aiohttp import ClientOSError
 from bot.redis_client import delete_file_id, get_file_id, save_file_id
 
 logger = logging.getLogger(__name__)
+
+
+def truncate_text(text: str, max_length: int = None) -> str:
+    """Обрезает текст до заданной длины и добавляет ..."""
+    from bot.constants import MAX_SHORT_TEXT_LENGTH
+
+    if max_length is None:
+        max_length = MAX_SHORT_TEXT_LENGTH
+
+    if len(text) <= max_length:
+        return text
+    return text[:max_length] + "..."
 
 
 def retry_async(retries=3, delay=5):
@@ -29,6 +40,7 @@ def retry_async(retries=3, delay=5):
         return wrapped_f
 
     return wrapper
+
 
 @retry_async(retries=3, delay=2)
 async def send_file(
@@ -68,4 +80,3 @@ async def send_file(
         return result
     except Exception as e:
         logger.error(f"При отправке карты произошла ошибка: {e}")
-

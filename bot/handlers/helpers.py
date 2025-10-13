@@ -18,7 +18,7 @@ from bot.middlewares import current_user
 from bot.models import ChannelNews
 from bot.redis_client import get_file_id
 from bot.translations import get_translation
-from bot.utils import send_file
+from bot.tools import send_file, truncate_text
 
 
 logger = structlog.getLogger(__name__)
@@ -41,7 +41,7 @@ async def get_menu(
 
     user = current_user.get()
     username = user.username or user.tg_user_id
-    user_link = f"tg://resolve?domain={username}" 
+    user_link = f"tg://resolve?domain={username}"
 
     encoded_id = (
         base64.urlsafe_b64encode(str(message.from_user.id).encode())
@@ -54,19 +54,23 @@ async def get_menu(
     if new_msg_text_key:
         caption = get_translation(new_msg_text_key)
     else:
-        caption = f"Пользователь: [{username}]({user_link})\n\nПригласить друга: {ref_link}"
-        
+        caption = (
+            f"Пользователь: [{username}]({user_link})\n\nПригласить друга: {ref_link}"
+        )
+
     if is_from_callback:
         result = await send_image_message(
             message=message,
             image_name="main_menu",
             caption=caption,
             keyboard=menu_kb(),
-            edit_message=True
+            edit_message=True,
         )
         if result:
             if prev_menu_id and prev_menu_id != result.message_id:
-                await safe_delete_message(message.bot, message.chat.id, prev_menu_id) # TODO проверить, что стоит так делать
+                await safe_delete_message(
+                    message.bot, message.chat.id, prev_menu_id
+                )  # TODO проверить, что стоит так делать
             await state.update_data(menu_msg_id=result.message_id)
     else:
         result = await send_image_message(
@@ -74,7 +78,7 @@ async def get_menu(
             image_name="main_menu",
             caption=caption,
             keyboard=menu_kb(),
-            edit_message=False
+            edit_message=False,
         )
         if result:
             if prev_menu_id and prev_menu_id != result.message_id:
@@ -125,7 +129,7 @@ async def send_image_message(
     keyboard: InlineKeyboardMarkup | None = None,
     above: bool = False,
     bot: Bot | None = None,
-    edit_message: bool = False
+    edit_message: bool = False,
 ) -> Message | None:
     """Отправляет изображение с кешированием через Redis"""
     if not bot:
@@ -160,7 +164,7 @@ async def send_image_message(
                     user_tg_id=message.chat.id,
                     caption=caption,
                     above=above,
-                    reply_markup=keyboard
+                    reply_markup=keyboard,
                 )
                 try:
                     await bot.delete_message(message.chat.id, message.message_id)
@@ -176,7 +180,7 @@ async def send_image_message(
                 user_tg_id=message.chat.id,
                 caption=caption,
                 above=above,
-                reply_markup=keyboard
+                reply_markup=keyboard,
             )
 
             try:
@@ -193,7 +197,7 @@ async def send_image_message(
                 user_tg_id=message.chat.id,
                 caption=caption,
                 above=above,
-                reply_markup=keyboard
+                reply_markup=keyboard,
             )
             return result
 
@@ -215,25 +219,35 @@ async def generate_digest_text() -> str:
     has_news = False
 
     channels_news = defaultdict(list)
-    user_news = ChannelNews.objects.filter(
-        channel__users=user,
-        created_at__gte=yesterday
-    ).select_related('channel').order_by('-created_at')
+    user_news = (
+        ChannelNews.objects.filter(channel__users=user, created_at__gte=yesterday)
+        .select_related("channel")
+        .order_by("-created_at")
+    )
 
     async for news in user_news:
         channels_news[news.channel].append(news)
 
     for channel, news_list in channels_news.items():
         has_news = True
-        channel_link = f"https://t.me/{channel.main_username}" if channel.main_username else channel.link_subscription or None
-        channel_block = f"[{channel.title}]({channel_link})\n" if channel_link else f"{channel.title}\n"
+        channel_link = (
+            f"https://t.me/{channel.main_username}"
+            if channel.main_username
+            else channel.link_subscription or None
+        )
+        channel_block = (
+            f"[{channel.title}]({channel_link})\n"
+            if channel_link
+            else f"{channel.title}\n"
+        )
 
         for news in news_list:
-            news_line = f"· {news.short_message}\n" # TODO переделать через обрезку полного сообщения
+            truncated = truncate_text(news.message or "")
+            news_line = f"· {truncated}\n"
             post_link = f"{channel_link}/{news.message_id}" if channel_link else None
             news_link = f"[Перейти к посту →]({post_link})" if post_link else None
-            news_block =  news_line + news_link
-            
+            news_block = news_line + (news_link or "")
+
             if current_length + len(channel_block) + len(news_block) + 1 > max_length:
                 break
 

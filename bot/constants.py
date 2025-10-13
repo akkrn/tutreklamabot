@@ -1,1 +1,2 @@
 MEDIA_FILES_PATH = "bot/mediafiles"
+MAX_SHORT_TEXT_LENGTH = 150
