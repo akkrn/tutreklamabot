@@ -63,3 +63,7 @@ uv.lock
 .coverage.*
 htmlcov/
 .pytest_cache/
+
+.cursor/
+.cursorrules
+.env.*

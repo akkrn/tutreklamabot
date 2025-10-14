@@ -1,0 +1,59 @@
+# Dockerfile для юзерботов
+# Оптимизированный образ для запуска userbot daemon
+
+FROM python:3.13-slim-bookworm as builder
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED 1
+ENV PIP_NO_CACHE_DIR 1
+ENV UV_SYSTEM_REQUIREMENTS_INSTALL_BY_DEFAULT=0
+
+# Копируем только необходимые файлы для зависимостей
+COPY pyproject.toml uv.lock ./
+RUN pip install uv && uv sync
+
+# Stage 2: Runner
+FROM python:3.13-slim-bookworm as runner
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED 1
+ENV DJANGO_SETTINGS_MODULE=settings.prod
+
+# Устанавливаем системные зависимости для Telethon
+RUN apt-get update && apt-get install -y \
+    libffi-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Создаем пользователя
+RUN addgroup --system userbotgroup && adduser --system --ingroup userbotgroup userbotuser
+
+# Создаем необходимые директории
+RUN mkdir -p /app/userbot/sessions /app/logs /app/.uv-cache && \
+    chown -R userbotuser:userbotgroup /app/userbot/sessions /app/logs /app/.uv-cache && \
+    chmod -R 775 /app/userbot/sessions /app/logs /app/.uv-cache
+
+# Устанавливаем uv
+RUN pip install uv
+
+# Копируем виртуальное окружение
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+ENV UV_CACHE_DIR=/app/.uv-cache
+
+# Копируем все файлы проекта
+COPY --chown=userbotuser:userbotgroup . ./
+
+# Исправляем права доступа к файлам сессий
+RUN chown -R userbotuser:userbotgroup /app/userbot/sessions/ /app/logs/ /app/.uv-cache/ || true
+
+USER userbotuser
+
+# Health check для юзербота
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python manage.py run_userbot --no-loop || exit 1
+
+# Команда по умолчанию
+CMD ["python", "manage.py", "run_userbot"]
