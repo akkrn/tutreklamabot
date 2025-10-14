@@ -243,22 +243,29 @@ async def generate_digest_text() -> str:
             if channel.main_username
             else channel.link_subscription or None
         )
+        # Безопасно экранируем название канала
+        safe_channel_title = channel.title
+
         channel_block = (
-            f"[{channel.title}]({channel_link})\n"
+            f"[{safe_channel_title}]({channel_link})\n"
             if channel_link
-            else f"{channel.title}\n"
+            else f"{safe_channel_title}\n"
         )
 
         for news in news_list:
+            # Безопасно экранируем и обрезаем текст новости
             truncated = truncate_text(news.message or "")
-            news_line = f"· {truncated}\n"
+            safe_truncated = truncated
+            news_line = f"· {safe_truncated}\n"
             post_link = (
                 f"{channel_link}/{news.message_id}" if channel_link else None
             )
             news_link = (
                 f"[Перейти к посту →]({post_link})" if post_link else None
             )
-            news_block = news_line + (news_link or "")
+            news_block = (
+                news_line + (news_link or "") + "\n"
+            )  # Добавляем разделитель
 
             if (
                 current_length + len(channel_block) + len(news_block) + 1

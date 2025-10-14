@@ -1,6 +1,7 @@
 from aiogram.types import InlineKeyboardButton
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from django.conf import settings
 
 from bot.translations import get_translation
 
@@ -20,6 +21,23 @@ def menu_kb() -> InlineKeyboardMarkup:
 def add_channels_kb() -> InlineKeyboardMarkup:
     """Клавиатура для экрана добавления каналов"""
     return create_inline_kb("add_channels_btn", width=1)
+
+
+def support_kb() -> InlineKeyboardMarkup:
+    """Клавиатура для экрана поддержки"""
+    kb_builder = InlineKeyboardBuilder()
+
+    support_text = get_translation("support_contact_btn")
+    support_url = f"https://t.me/{settings.SUPPORT_USERNAME}"
+    kb_builder.row(InlineKeyboardButton(text=support_text, url=support_url))
+
+    # Кнопка главного меню
+    main_menu_text = get_translation("main_menu_btn")
+    kb_builder.row(
+        InlineKeyboardButton(text=main_menu_text, callback_data="main_menu_btn")
+    )
+
+    return kb_builder.as_markup()
 
 
 def back_to_menu_kb() -> InlineKeyboardMarkup:

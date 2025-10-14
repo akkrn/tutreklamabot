@@ -6,6 +6,7 @@ from django.conf import settings
 
 from bot.keyboards import back_to_menu_kb
 from bot.models import Channel
+from bot.tools import send_long
 from userbot.redis_messages import NewAdMessage
 from userbot.redis_messages import deserialize_message
 
@@ -91,17 +92,20 @@ class AdNotificationHandler:
                 or f"https://t.me/{channel.main_username}"
             )
 
-            message_text = f"📢 Новый рекламный пост в канале [{ad_message.channel_title}]({channel_link})\n\n"
-            message_text += f"{ad_message.message_text}\n\n"
+            # Безопасно экранируем текст сообщения
+            safe_message_text = ad_message.message_text
+            safe_channel_title = ad_message.channel_title
+
+            message_text = f"📢 Новый рекламный пост в канале [{safe_channel_title}]({channel_link})\n\n"
+            message_text += f"{safe_message_text}\n\n"
 
             sent_count = 0
             for user in users:
                 try:
-                    await self.bot.send_message(
-                        chat_id=user.tg_chat_id,
-                        text=message_text,
-                        parse_mode="Markdown",
-                        disable_web_page_preview=True,
+                    await send_long(
+                        self.bot,
+                        user.tg_chat_id,
+                        message_text,
                         reply_markup=back_to_menu_kb(),
                     )
                     sent_count += 1

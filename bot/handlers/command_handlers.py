@@ -18,6 +18,7 @@ from bot.handlers.helpers import get_menu
 from bot.handlers.helpers import send_image_message
 from bot.keyboards import add_channels_kb
 from bot.keyboards import back_to_menu_kb
+from bot.keyboards import support_kb
 from bot.keyboards import user_channels_kb
 from bot.middlewares import current_user
 from bot.models import Channel
@@ -66,7 +67,11 @@ async def handle_add_channels(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "main_menu_btn")
 async def handle_main_menu(callback: CallbackQuery, state: FSMContext):
     """Хендлер кнопки 'Главное меню'"""
-    await get_menu(callback.message, state, is_from_callback=True)
+    # Убираем кнопку из рекламного сообщения
+    await callback.message.edit_reply_markup(reply_markup=None)
+
+    # Отправляем новое сообщение с меню
+    await get_menu(callback.message, state, is_from_callback=False)
 
 
 @router.callback_query(F.data == "my_channels_btn")
@@ -109,11 +114,25 @@ async def handle_digest(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "support_btn")
 async def handle_support(callback: CallbackQuery, state: FSMContext):
     """Хендлер кнопки 'Помощь'"""
+    support_text = (
+        "🌀 **Как это работает?**\n"
+        "Я отслеживаю телеграм-каналы и присылаю рекламные посты. "
+        "Вы видите, кто размещается у конкурентов, и можете предложить рекламу у себя.\n\n"
+        "💬 **Как связаться с рекламодателем?**\n"
+        "· Если рекламируют канал → контакты в описании.\n"
+        "· Сайт → ищите почту или соцсети.\n"
+        "· Нет контактов → спросите у админа канала\n\n"
+        "🖖 **Что писать рекламодателю?**\n"
+        "· Опишите свою аудиторию.\n"
+        "· Дайте цифры и статистику.\n"
+        "· Покажите, чем вы лучше конкурентов."
+    )
+
     await send_image_message(
         message=callback.message,
         image_name="support",
-        caption="",
-        keyboard=back_to_menu_kb(),
+        caption=support_text,
+        keyboard=support_kb(),
         edit_message=True,
     )
 

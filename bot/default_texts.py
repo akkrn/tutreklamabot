@@ -4,6 +4,7 @@ DEFAULT_TEXTS = {
     "my_channels_btn": "Мои каналы",
     "digest_btn": "Дайджест",
     "support_btn": "Помощь",
+    "support_contact_btn": "Поддержка",
     "search_channels_btn": "Поиск",
     "main_menu_btn": "Главное меню",
 }
