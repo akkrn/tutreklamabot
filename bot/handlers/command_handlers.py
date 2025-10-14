@@ -13,6 +13,7 @@ from aiogram.types import Message
 from asgiref.sync import sync_to_async
 from django.utils import timezone
 
+from bot.constants import MAX_CHANNELS_PER_USER
 from bot.handlers.helpers import generate_digest_text
 from bot.handlers.helpers import get_menu
 from bot.handlers.helpers import send_image_message
@@ -32,6 +33,32 @@ from userbot.redis_messages import SubscribeChannelsMessage
 
 router = Router()
 logger = structlog.getLogger(__name__)
+
+
+async def check_channel_limit(
+    user: User, new_channels_count: int
+) -> tuple[bool, str]:
+    """Проверяет, не превышает ли пользователь лимит каналов"""
+    current_channels_count = await sync_to_async(
+        lambda: Channel.objects.filter(users=user).count()
+    )()
+
+    total_channels = current_channels_count + new_channels_count
+
+    if total_channels > MAX_CHANNELS_PER_USER:
+        remaining_slots = MAX_CHANNELS_PER_USER - current_channels_count
+        if remaining_slots <= 0:
+            return (
+                False,
+                f"Вы уже подписаны на максимальное количество каналов ({MAX_CHANNELS_PER_USER}). Отпишитесь от некоторых каналов, чтобы добавить новые.",
+            )
+        else:
+            return (
+                False,
+                f"Вы можете добавить только {remaining_slots} каналов. У вас уже {current_channels_count} из {MAX_CHANNELS_PER_USER}.",
+            )
+
+    return True, ""
 
 
 @router.message(CommandStart())
@@ -141,10 +168,20 @@ async def handle_support(callback: CallbackQuery, state: FSMContext):
 @router.message()
 async def handle_channel_links(message: Message, state: FSMContext):
     """Обработчик ссылок на каналы от пользователя"""
+    user = current_user.get()
+
     # Проверяем, пересланное ли сообщение
     if message.forward_from_chat:
         channel_links = handle_forwarded_message(message)
         if channel_links:
+            # Проверяем лимит каналов
+            can_add, limit_message = await check_channel_limit(
+                user, len(channel_links)
+            )
+            if not can_add:
+                await message.answer(limit_message)
+                return
+
             await message.answer(
                 f"Найдено каналов для добавления: {len(channel_links)}\n"
                 f"Проверяем доступность и подписываемся..."
@@ -174,6 +211,11 @@ async def handle_channel_links(message: Message, state: FSMContext):
             "• https://t.me/channel_name\n"
             "• t.me/+private_link"
         )
+        return
+
+    can_add, limit_message = await check_channel_limit(user, len(channel_links))
+    if not can_add:
+        await message.answer(limit_message)
         return
 
     await state.update_data(channel_links=channel_links)
