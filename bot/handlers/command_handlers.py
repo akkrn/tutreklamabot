@@ -23,6 +23,7 @@ from bot.keyboards import user_channels_kb
 from bot.middlewares import current_user
 from bot.models import Channel
 from bot.models import User
+from bot.utils.link_parser import handle_forwarded_message
 from bot.utils.link_parser import parse_channel_links
 from core.event_manager import EventType
 from core.event_manager import event_manager
@@ -140,9 +141,27 @@ async def handle_support(callback: CallbackQuery, state: FSMContext):
 @router.message()
 async def handle_channel_links(message: Message, state: FSMContext):
     """Обработчик ссылок на каналы от пользователя"""
+    # Проверяем, пересланное ли сообщение
+    if message.forward_from_chat:
+        channel_links = handle_forwarded_message(message)
+        if channel_links:
+            await message.answer(
+                f"Найдено каналов для добавления: {len(channel_links)}\n"
+                f"Проверяем доступность и подписываемся..."
+            )
+            await state.update_data(channel_links=channel_links)
+            await process_channel_subscription(message, state, channel_links)
+            return
+        else:
+            await message.answer(
+                "Не удалось извлечь ссылку на канал из пересланного сообщения."
+            )
+            return
+
+    # Обычное сообщение
     if not message.text:
         await message.answer(
-            "Отправьте текстовое сообщение со ссылками на каналы."
+            "Отправьте текстовое сообщение со ссылками на каналы или перешлите сообщение из канала."
         )
         return
 
@@ -152,8 +171,8 @@ async def handle_channel_links(message: Message, state: FSMContext):
             "Не удалось найти валидные ссылки на каналы.\n\n"
             "Поддерживаемые форматы:\n"
             "• t.me/channel_name\n"
-            "• @channel_name\n"
-            "• https://t.me/channel_name"
+            "• https://t.me/channel_name\n"
+            "• t.me/+private_link"
         )
         return
 
