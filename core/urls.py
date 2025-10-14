@@ -15,9 +15,25 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path
 
+from bot.health_views import health_check
+from bot.health_views import health_detailed
+from bot.health_views import health_live
+from bot.health_views import health_ready
+
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # Health check endpoints
+    path("health/", health_check, name="health"),
+    path("health/detailed/", health_detailed, name="health_detailed"),
+    path("health/ready/", health_ready, name="health_ready"),
+    path("health/live/", health_live, name="health_live"),
 ]
+
+# Обслуживание статических файлов в продакшене
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

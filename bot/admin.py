@@ -19,6 +19,7 @@ from bot.models import TextTemplate
 from bot.models import User
 from bot.models import UserBot
 from bot.services.userbot_auth import UserbotAuthService
+from bot.services.userbot_manager import UserbotManagerService
 
 logger = structlog.getLogger(__name__)
 
@@ -84,6 +85,13 @@ class UserBotAdmin(admin.ModelAdmin):
         "updated_at",
     ]
     inlines = [ChannelSubscriptionInline]
+    actions = [
+        "authorize_userbot",
+        "check_userbot_status",
+        "start_userbot_action",
+        "stop_userbot_action",
+        "restart_userbot_action",
+    ]
 
     fieldsets = (
         (
@@ -116,25 +124,131 @@ class UserBotAdmin(admin.ModelAdmin):
         return readonly
 
     def auth_actions(self, obj):
-        """Кнопки для авторизации"""
+        """Кнопки для авторизации и управления"""
+        buttons = []
+
         if obj.status == UserBot.STATUS_INACTIVE:
-            return format_html(
-                '<a class="button" href="{}">Авторизовать</a>',
-                reverse("admin:bot_userbot_auth", args=[obj.pk]),
+            buttons.append(
+                format_html(
+                    '<a class="button" href="{}">Авторизовать</a>',
+                    reverse("admin:bot_userbot_auth", args=[obj.pk]),
+                )
             )
         elif obj.status == UserBot.STATUS_ERROR:
-            return format_html(
-                '<a class="button" href="{}">Переавторизовать</a>',
-                reverse("admin:bot_userbot_auth", args=[obj.pk]),
+            buttons.append(
+                format_html(
+                    '<a class="button" href="{}">Переавторизовать</a>',
+                    reverse("admin:bot_userbot_auth", args=[obj.pk]),
+                )
             )
         elif obj.status == UserBot.STATUS_ACTIVE:
-            return format_html(
-                '<a class="button" href="{}">Проверить статус</a>',
-                reverse("admin:bot_userbot_check_status", args=[obj.pk]),
+            buttons.append(
+                format_html(
+                    '<a class="button" href="{}">Проверить статус</a>',
+                    reverse("admin:bot_userbot_check_status", args=[obj.pk]),
+                )
             )
-        return "-"
+
+        # Добавляем кнопки управления для авторизованных юзерботов
+        if obj.is_active:
+            buttons.append(
+                format_html(
+                    '<a class="button" href="{}" style="background-color: #28a745; color: white;">Запустить</a>',
+                    reverse("admin:bot_userbot_start", args=[obj.pk]),
+                )
+            )
+            buttons.append(
+                format_html(
+                    '<a class="button" href="{}" style="background-color: #dc3545; color: white;">Остановить</a>',
+                    reverse("admin:bot_userbot_stop", args=[obj.pk]),
+                )
+            )
+            buttons.append(
+                format_html(
+                    '<a class="button" href="{}" style="background-color: #ffc107; color: black;">Перезапустить</a>',
+                    reverse("admin:bot_userbot_restart", args=[obj.pk]),
+                )
+            )
+
+        return format_html(" ".join(buttons)) if buttons else "-"
 
     auth_actions.short_description = "Действия"
+
+    def start_userbot_action(self, request, queryset):
+        """Действие для запуска юзерботов"""
+        success_count = 0
+        error_count = 0
+
+        for userbot in queryset:
+            result = asyncio.run(UserbotManagerService.start_userbot(userbot))
+            if result["success"]:
+                success_count += 1
+            else:
+                error_count += 1
+                messages.error(
+                    request, f"Ошибка запуска {userbot.name}: {result['error']}"
+                )
+
+        if success_count > 0:
+            messages.success(
+                request, f"Успешно запущено юзерботов: {success_count}"
+            )
+        if error_count > 0:
+            messages.error(request, f"Ошибок при запуске: {error_count}")
+
+    start_userbot_action.short_description = "Запустить выбранные юзерботы"
+
+    def stop_userbot_action(self, request, queryset):
+        """Действие для остановки юзерботов"""
+        success_count = 0
+        error_count = 0
+
+        for userbot in queryset:
+            result = asyncio.run(UserbotManagerService.stop_userbot(userbot))
+            if result["success"]:
+                success_count += 1
+            else:
+                error_count += 1
+                messages.error(
+                    request,
+                    f"Ошибка остановки {userbot.name}: {result['error']}",
+                )
+
+        if success_count > 0:
+            messages.success(
+                request, f"Успешно остановлено юзерботов: {success_count}"
+            )
+        if error_count > 0:
+            messages.error(request, f"Ошибок при остановке: {error_count}")
+
+    stop_userbot_action.short_description = "Остановить выбранные юзерботы"
+
+    def restart_userbot_action(self, request, queryset):
+        """Действие для перезапуска юзерботов"""
+        success_count = 0
+        error_count = 0
+
+        for userbot in queryset:
+            result = asyncio.run(UserbotManagerService.restart_userbot(userbot))
+            if result["success"]:
+                success_count += 1
+            else:
+                error_count += 1
+                messages.error(
+                    request,
+                    f"Ошибка перезапуска {userbot.name}: {result['error']}",
+                )
+
+        if success_count > 0:
+            messages.success(
+                request, f"Успешно перезапущено юзерботов: {success_count}"
+            )
+        if error_count > 0:
+            messages.error(request, f"Ошибок при перезапуске: {error_count}")
+
+    restart_userbot_action.short_description = (
+        "Перезапустить выбранные юзерботы"
+    )
 
     def get_urls(self):
         """Добавляем кастомные URL для авторизации"""
@@ -149,6 +263,21 @@ class UserBotAdmin(admin.ModelAdmin):
                 "<int:userbot_id>/check-status/",
                 self.admin_site.admin_view(self.check_status_view),
                 name="bot_userbot_check_status",
+            ),
+            path(
+                "<int:userbot_id>/start/",
+                self.admin_site.admin_view(self.start_userbot_view),
+                name="bot_userbot_start",
+            ),
+            path(
+                "<int:userbot_id>/stop/",
+                self.admin_site.admin_view(self.stop_userbot_view),
+                name="bot_userbot_stop",
+            ),
+            path(
+                "<int:userbot_id>/restart/",
+                self.admin_site.admin_view(self.restart_userbot_view),
+                name="bot_userbot_restart",
             ),
         ]
         return custom_urls + urls
@@ -284,6 +413,57 @@ class UserBotAdmin(admin.ModelAdmin):
             userbot.last_error = result["error"]
             userbot.save()
             messages.error(request, f"Ошибка проверки: {result['error']}")
+
+        return redirect("admin:bot_userbot_change", userbot_id)
+
+    def start_userbot_view(self, request, userbot_id):
+        """Запуск юзербота"""
+        try:
+            userbot = UserBot.objects.get(id=userbot_id)
+        except UserBot.DoesNotExist:
+            messages.error(request, "Юзербот не найден")
+            return redirect("admin:bot_userbot_changelist")
+
+        result = asyncio.run(UserbotManagerService.start_userbot(userbot))
+
+        if result["success"]:
+            messages.success(request, result["message"])
+        else:
+            messages.error(request, f"Ошибка запуска: {result['error']}")
+
+        return redirect("admin:bot_userbot_change", userbot_id)
+
+    def stop_userbot_view(self, request, userbot_id):
+        """Остановка юзербота"""
+        try:
+            userbot = UserBot.objects.get(id=userbot_id)
+        except UserBot.DoesNotExist:
+            messages.error(request, "Юзербот не найден")
+            return redirect("admin:bot_userbot_changelist")
+
+        result = asyncio.run(UserbotManagerService.stop_userbot(userbot))
+
+        if result["success"]:
+            messages.success(request, result["message"])
+        else:
+            messages.error(request, f"Ошибка остановки: {result['error']}")
+
+        return redirect("admin:bot_userbot_change", userbot_id)
+
+    def restart_userbot_view(self, request, userbot_id):
+        """Перезапуск юзербота"""
+        try:
+            userbot = UserBot.objects.get(id=userbot_id)
+        except UserBot.DoesNotExist:
+            messages.error(request, "Юзербот не найден")
+            return redirect("admin:bot_userbot_changelist")
+
+        result = asyncio.run(UserbotManagerService.restart_userbot(userbot))
+
+        if result["success"]:
+            messages.success(request, result["message"])
+        else:
+            messages.error(request, f"Ошибка перезапуска: {result['error']}")
 
         return redirect("admin:bot_userbot_change", userbot_id)
 

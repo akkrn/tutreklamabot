@@ -3,15 +3,19 @@ from typing import Dict
 from typing import Optional
 
 import structlog
+from asgiref.sync import sync_to_async
 from telethon import TelegramClient
 from telethon import events
 from telethon.errors import AuthKeyUnregisteredError
 from telethon.errors import SessionRevokedError
+from telethon.tl.functions.channels import JoinChannelRequest
 
 from bot.models import UserBot
-from userbot.event_manager import EventType
-from userbot.event_manager import event_manager
+from core.event_manager import EventType
+from core.event_manager import event_manager
 from userbot.redis_messages import NewAdMessage
+from userbot.redis_messages import SubscribeChannelsMessage
+from userbot.redis_messages import SubscribeResponseMessage
 
 logger = structlog.getLogger(__name__)
 
@@ -35,6 +39,16 @@ class UserbotManager:
         # Запускаем мониторинг
         asyncio.create_task(self._monitor_userbots())
 
+        # Регистрируем обработчик для команд subscribe
+        event_manager.register_handler(
+            EventType.SUBSCRIBE_CHANNELS,
+            self.handle_subscribe_request,
+            "userbot:subscribe",
+        )
+
+        # Запускаем прослушивание событий
+        await event_manager.start_listening()
+
     async def stop(self):
         """Останавливает менеджер юзерботов"""
         self.running = False
@@ -54,11 +68,17 @@ class UserbotManager:
 
     async def _load_active_userbots(self):
         """Загружает активные юзерботы из базы данных"""
-        active_userbots = await UserBot.objects.filter(
-            status=UserBot.STATUS_ACTIVE, is_active=True
-        ).aiterator()
 
-        async for userbot in active_userbots:
+        def get_active_userbots():
+            return list(
+                UserBot.objects.filter(
+                    status=UserBot.STATUS_ACTIVE, is_active=True
+                )
+            )
+
+        active_userbots = await sync_to_async(get_active_userbots)()
+
+        for userbot in active_userbots:
             await self._start_userbot(userbot)
 
     async def _start_userbot(self, userbot: UserBot):
@@ -297,6 +317,136 @@ class UserbotManager:
             if client.is_connected():
                 await client.disconnect()
             del self.active_userbots[userbot_id]
+
+    async def handle_subscribe_request(self, request: SubscribeChannelsMessage):
+        """Обрабатывает запрос на подписку на каналы"""
+        try:
+            logger.info(f"Получен запрос на подписку: {request.channel_links}")
+
+            # Выбираем лучший юзербот для подписки
+            best_userbot = await self._select_best_userbot()
+            if not best_userbot:
+                logger.error("Нет доступных юзерботов для подписки")
+                return
+
+            client = self.active_userbots.get(best_userbot.id)
+            if not client or not client.is_connected():
+                logger.error(f"Юзербот {best_userbot.name} не подключен")
+                return
+
+            # Подписываемся на каналы
+            results = []
+            for channel_link in request.channel_links:
+                try:
+                    # Для приватных каналов используем JoinChannelRequest напрямую
+                    if channel_link.startswith(
+                        "https://t.me/+"
+                    ) or channel_link.startswith("t.me/+"):
+                        # Это приватная ссылка-приглашение
+                        await client(JoinChannelRequest(channel_link))
+
+                        # После успешной подписки получаем информацию о канале
+                        try:
+                            entity = await client.get_entity(channel_link)
+                            result = {
+                                "link": channel_link,
+                                "success": True,
+                                "telegram_id": entity.id,
+                                "title": getattr(entity, "title", ""),
+                                "username": getattr(entity, "username", ""),
+                                "error_message": None,
+                            }
+                        except Exception:
+                            # Если не удалось получить entity, но подписка прошла успешно
+                            result = {
+                                "link": channel_link,
+                                "success": True,
+                                "telegram_id": None,
+                                "title": "Приватный канал",
+                                "username": None,
+                                "error_message": None,
+                            }
+                    else:
+                        # Для публичных каналов сначала получаем entity
+                        entity = await client.get_entity(channel_link)
+                        await client(JoinChannelRequest(entity))
+
+                        result = {
+                            "link": channel_link,
+                            "success": True,
+                            "telegram_id": entity.id,
+                            "title": getattr(entity, "title", ""),
+                            "username": getattr(entity, "username", ""),
+                            "error_message": None,
+                        }
+
+                    results.append(result)
+                    logger.info(f"Подписались на канал {channel_link}")
+
+                except Exception as e:
+                    logger.error(
+                        f"Ошибка подписки на канал {channel_link}: {e}"
+                    )
+
+                    # Создаем результат с ошибкой
+                    result = {
+                        "link": channel_link,
+                        "success": False,
+                        "telegram_id": None,
+                        "title": None,
+                        "username": None,
+                        "error_message": str(e),
+                    }
+                    results.append(result)
+
+            # Отправляем ответ
+            response = SubscribeResponseMessage(
+                request_id=request.request_id,
+                user_id=request.user_id,
+                results=results,
+                success=True,
+                error_message=None,
+            )
+
+            # Отправляем ответ в специальный канал для ожидания
+            response_channel = f"bot:response:{request.request_id}"
+            await event_manager.publish_event(
+                EventType.SUBSCRIBE_RESPONSE, response, response_channel
+            )
+
+        except Exception as e:
+            logger.error(f"Ошибка обработки запроса подписки: {e}")
+
+            # Отправляем ответ об ошибке
+            response = SubscribeResponseMessage(
+                request_id=request.request_id,
+                user_id=request.user_id,
+                results=[],
+                success=False,
+                error_message=str(e),
+            )
+
+            # Отправляем ответ в специальный канал для ожидания
+            response_channel = f"bot:response:{request.request_id}"
+            await event_manager.publish_event(
+                EventType.SUBSCRIBE_RESPONSE, response, response_channel
+            )
+
+    async def _select_best_userbot(self):
+        """Выбирает лучший юзербот для подписки"""
+        # Простая логика - выбираем первый доступный юзербот
+        for userbot_id, client in self.active_userbots.items():
+            if client.is_connected():
+                try:
+
+                    def get_userbot():
+                        return UserBot.objects.get(id=userbot_id)
+
+                    userbot = await sync_to_async(get_userbot)()
+                    return userbot
+                except UserBot.DoesNotExist:
+                    continue
+        return None
 
 
 # Глобальный экземпляр менеджера

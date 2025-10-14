@@ -3,7 +3,6 @@ from typing import Optional
 
 import structlog
 from asgiref.sync import sync_to_async
-from django.conf import settings
 from telethon import TelegramClient
 from telethon import events
 from telethon.errors import UserAlreadyParticipantError
@@ -15,35 +14,36 @@ from bot.models import Channel
 from bot.models import ChannelNews
 from core.event_manager import EventType
 from core.event_manager import event_manager
-
-from .redis_messages import ChannelResult
-from .redis_messages import NewAdMessage
-from .redis_messages import SubscribeChannelsMessage
-from .redis_messages import SubscribeResponseMessage
+from userbot.redis_messages import ChannelResult
+from userbot.redis_messages import NewAdMessage
+from userbot.redis_messages import SubscribeChannelsMessage
+from userbot.redis_messages import SubscribeResponseMessage
 
 logger = structlog.getLogger(__name__)
 
 
 class UserbotDaemon:
-    def __init__(self):
+    def __init__(self, userbot):
+        self.userbot = userbot
         self.client = None
         self.running = False
 
     async def start(self):
         """Запускает userbot daemon"""
         try:
-            # Инициализируем клиент
-            api_id = settings.TELEGRAM_API_ID
-            api_hash = settings.TELEGRAM_API_HASH
-            session_name = settings.USERBOT_SESSION_NAME
-            string_session = getattr(settings, "TELEGRAM_STRING_SESSION", None)
+            # Инициализируем клиент с данными из UserBot
+            api_id = self.userbot.api_id
+            api_hash = self.userbot.api_hash
+            string_session = self.userbot.string_session
 
             if string_session:
                 self.client = TelegramClient(
                     StringSession(string_session), api_id, api_hash
                 )
             else:
-                self.client = TelegramClient(session_name, api_id, api_hash)
+                # Используем путь к файлу сессии
+                session_path = self.userbot.get_session_path()
+                self.client = TelegramClient(session_path, api_id, api_hash)
 
             await self.client.connect()
 
