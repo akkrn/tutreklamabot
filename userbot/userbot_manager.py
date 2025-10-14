@@ -403,6 +403,7 @@ class UserbotManager:
             response = SubscribeResponseMessage(
                 request_id=request.request_id,
                 user_id=request.user_id,
+                userbot_id=best_userbot.id,
                 results=results,
                 success=True,
                 error_message=None,
@@ -421,6 +422,7 @@ class UserbotManager:
             response = SubscribeResponseMessage(
                 request_id=request.request_id,
                 user_id=request.user_id,
+                userbot_id=0,
                 results=[],
                 success=False,
                 error_message=str(e),

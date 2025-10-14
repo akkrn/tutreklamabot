@@ -61,6 +61,7 @@ class SubscribeResponseMessage:
     message_type: str = MessageType.SUBSCRIBE_RESPONSE.value
     request_id: str = ""
     user_id: int = 0
+    userbot_id: int = 0
     results: List[dict] = None  # List[ChannelResult as dict]
     success: bool = True
     error_message: Optional[str] = None

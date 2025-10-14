@@ -23,6 +23,7 @@ from bot.keyboards import support_kb
 from bot.keyboards import user_channels_kb
 from bot.middlewares import current_user
 from bot.models import Channel
+from bot.models import ChannelSubscription
 from bot.models import User
 from bot.utils.link_parser import handle_forwarded_message
 from bot.utils.link_parser import parse_channel_links
@@ -346,6 +347,18 @@ async def process_channel_subscription(
                     await channel.asave()
 
                 await sync_to_async(user.channels.add)(channel)
+
+                if response.userbot_id > 0:
+
+                    def create_subscription():
+                        return ChannelSubscription.objects.update_or_create(
+                            channel=channel,
+                            userbot_id=response.userbot_id,
+                            defaults={"is_subscribed": True},
+                        )
+
+                    await sync_to_async(create_subscription)()
+
                 successful_channels.append(result.title)
 
                 logger.info(
@@ -371,7 +384,7 @@ async def process_channel_subscription(
                 caption += f"\nНе удалось добавить: {len(failed_channels)}"
             await send_image_message(
                 message=message,
-                image_name="many_done",
+                image_name="many_add",
                 caption=caption,
                 keyboard=back_to_menu_kb(),
             )
@@ -398,8 +411,6 @@ async def process_channel_subscription(
             keyboard=add_channels_kb(),
         )
         return
-
-    await get_menu(message, state)
 
 
 @router.message()
