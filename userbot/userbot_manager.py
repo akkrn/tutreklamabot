@@ -1,21 +1,19 @@
 import asyncio
-from typing import Dict
-from typing import Optional
+from typing import Dict, Optional
 
 import structlog
 from asgiref.sync import sync_to_async
-from telethon import TelegramClient
-from telethon import events
-from telethon.errors import AuthKeyUnregisteredError
-from telethon.errors import SessionRevokedError
+from telethon import TelegramClient, events
+from telethon.errors import AuthKeyUnregisteredError, SessionRevokedError
 from telethon.tl.functions.channels import JoinChannelRequest
 
 from bot.models import UserBot
-from core.event_manager import EventType
-from core.event_manager import event_manager
-from userbot.redis_messages import NewAdMessage
-from userbot.redis_messages import SubscribeChannelsMessage
-from userbot.redis_messages import SubscribeResponseMessage
+from core.event_manager import EventType, event_manager
+from userbot.redis_messages import (
+    NewAdMessage,
+    SubscribeChannelsMessage,
+    SubscribeResponseMessage,
+)
 
 logger = structlog.getLogger(__name__)
 

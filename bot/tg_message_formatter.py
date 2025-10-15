@@ -8,8 +8,7 @@ from typing import Iterator
 
 import telegram_text
 import telegram_text.bases
-from django.template import Context
-from django.template import Template
+from django.template import Context, Template
 
 type MarkdownPatterns = list[tuple[str, str]]
 MARKDOWN_FLAVOR_A = [

@@ -2,22 +2,21 @@ import asyncio
 
 import structlog
 from django import forms
-from django.contrib import admin
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.http import JsonResponse
-from django.shortcuts import redirect
-from django.shortcuts import render
-from django.urls import path
-from django.urls import reverse
+from django.shortcuts import redirect, render
+from django.urls import path, reverse
 from django.utils.html import format_html
 
-from bot.models import Channel
-from bot.models import ChannelNews
-from bot.models import ChannelSubscription
-from bot.models import ChannelUser
-from bot.models import TextTemplate
-from bot.models import User
-from bot.models import UserBot
+from bot.models import (
+    Channel,
+    ChannelNews,
+    ChannelSubscription,
+    ChannelUser,
+    TextTemplate,
+    User,
+    UserBot,
+)
 from bot.services.userbot_auth import UserbotAuthService
 from bot.services.userbot_manager import UserbotManagerService
 

@@ -1,20 +1,18 @@
 import asyncio
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
-from typing import Callable
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import structlog
 
 from core.redis_manager import redis_manager
-from userbot.redis_messages import NewAdMessage
-from userbot.redis_messages import SubscribeChannelsMessage
-from userbot.redis_messages import SubscribeResponseMessage
-from userbot.redis_messages import deserialize_message
-from userbot.redis_messages import serialize_message
+from userbot.redis_messages import (
+    NewAdMessage,
+    SubscribeChannelsMessage,
+    SubscribeResponseMessage,
+    deserialize_message,
+    serialize_message,
+)
 
 logger = structlog.getLogger(__name__)
 

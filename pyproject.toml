@@ -12,6 +12,7 @@ dependencies = [
     "psycopg[binary]>=3.2.10",
     "python-dotenv>=1.1.1",
     "redis>=6.4.0",
+    "ruff>=0.14.0",
     "structlog>=25.4.0",
     "telegram-text>=0.2.0",
     "telethon>=1.41.2",
@@ -27,4 +28,5 @@ ignore = ["E203", "E501"]  # E203 - whitespace before ':', E501 - line too long
 
 [tool.ruff.lint.isort]
 known-first-party = ["bot", "userbot", "core", "utils"]
-force-single-line = true
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+lines-between-types = 0

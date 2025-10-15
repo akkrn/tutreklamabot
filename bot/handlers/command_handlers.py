@@ -3,39 +3,36 @@ import uuid
 from datetime import timedelta
 
 import structlog
-from aiogram import F
-from aiogram import Router
-from aiogram.filters import CommandObject
-from aiogram.filters import CommandStart
+from aiogram import F, Router
+from aiogram.filters import CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 from django.utils import timezone
 
-from bot.constants import MAX_CHANNELS_PER_USER
-from bot.handlers.helpers import generate_digest_text
-from bot.handlers.helpers import get_menu
-from bot.handlers.helpers import send_image_message
-from bot.keyboards import add_channels_kb
-from bot.keyboards import back_to_menu_kb
-from bot.keyboards import limit_reached_kb
-from bot.keyboards import support_kb
-from bot.keyboards import tariff_kb
-from bot.keyboards import user_channels_kb
+from bot.handlers.helpers import (
+    generate_digest_text,
+    get_menu,
+    send_image_message,
+)
+from bot.keyboards import (
+    add_channels_kb,
+    back_to_menu_kb,
+    limit_reached_kb,
+    support_kb,
+    tariff_kb,
+    user_channels_kb,
+)
 from bot.middlewares import current_user
-from bot.models import Channel
-from bot.models import ChannelSubscription
-from bot.models import User
-from bot.utils.link_parser import handle_forwarded_message
-from bot.utils.link_parser import parse_channel_links
-from core.event_manager import EventType
-from core.event_manager import event_manager
-from userbot.redis_messages import ChannelResult
-from userbot.redis_messages import SubscribeChannelsMessage
+from bot.models import Channel, ChannelSubscription, User
+from bot.utils.link_parser import handle_forwarded_message, parse_channel_links
+from core.event_manager import EventType, event_manager
+from userbot.redis_messages import ChannelResult, SubscribeChannelsMessage
 
 router = Router()
 logger = structlog.getLogger(__name__)
+
+MAX_CHANNELS_PER_USER = 7
 
 
 async def check_channel_limit(

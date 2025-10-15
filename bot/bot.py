@@ -1,23 +1,20 @@
 import redis.asyncio as redis
 import structlog
-from aiogram import Bot
-from aiogram import Dispatcher
+from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
-from aiogram.types import BotCommand
-from aiogram.types import BotCommandScopeDefault
+from aiogram.types import BotCommand, BotCommandScopeDefault
 from aiogram.utils.callback_answer import CallbackAnswerMiddleware
 from django.conf import settings
 
 from bot.ad_notification_handler import AdNotificationHandler
-from bot.handlers import command_handlers
-from bot.handlers import other_handlers
-from bot.handlers import status_handlers
-from bot.middlewares import CurrentUserMiddleware
-from bot.middlewares import IgnoreMessageNotModifiedMiddleware
-from core.event_manager import EventType
-from core.event_manager import event_manager
+from bot.handlers import command_handlers, other_handlers, status_handlers
+from bot.middlewares import (
+    CurrentUserMiddleware,
+    IgnoreMessageNotModifiedMiddleware,
+)
+from core.event_manager import EventType, event_manager
 
 logger = structlog.getLogger(__name__)
 

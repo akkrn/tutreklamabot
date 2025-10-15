@@ -1,5 +1,4 @@
-from aiogram.types import InlineKeyboardButton
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from django.conf import settings
 

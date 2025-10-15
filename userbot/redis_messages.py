@@ -1,9 +1,7 @@
 import json
-from dataclasses import asdict
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import List
-from typing import Optional
+from typing import List, Optional
 
 import structlog
 

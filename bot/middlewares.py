@@ -1,14 +1,10 @@
 from contextvars import ContextVar
-from typing import Any
-from typing import Awaitable
-from typing import Callable
-from typing import Dict
+from typing import Any, Awaitable, Callable, Dict
 
 import structlog
 from aiogram import BaseMiddleware
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import TelegramObject
-from aiogram.types import Update
+from aiogram.types import TelegramObject, Update
 
 from bot.models import User
 

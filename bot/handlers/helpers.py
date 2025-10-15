@@ -7,10 +7,12 @@ import structlog
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
-from aiogram.types import InlineKeyboardMarkup
-from aiogram.types import InputMediaPhoto
-from aiogram.types import Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+    Message,
+)
 from django.conf import settings
 from django.utils import timezone
 
@@ -19,8 +21,7 @@ from bot.keyboards import menu_kb
 from bot.middlewares import current_user
 from bot.models import ChannelNews
 from bot.redis_client import get_file_id
-from bot.tools import send_file
-from bot.tools import truncate_text
+from bot.tools import send_file, truncate_text
 from bot.translations import get_translation
 
 logger = structlog.getLogger(__name__)

@@ -7,8 +7,7 @@ from django.conf import settings
 from bot.keyboards import back_to_menu_kb
 from bot.models import Channel
 from bot.tools import send_long
-from userbot.redis_messages import NewAdMessage
-from userbot.redis_messages import deserialize_message
+from userbot.redis_messages import NewAdMessage, deserialize_message
 
 logger = structlog.getLogger(__name__)
 

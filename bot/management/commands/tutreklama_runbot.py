@@ -1,8 +1,7 @@
 import asyncio
 
 import structlog
-from aiogram import Bot
-from aiogram import Dispatcher
+from aiogram import Bot, Dispatcher
 from django.core.management.base import BaseCommand
 
 from bot import bot_texts

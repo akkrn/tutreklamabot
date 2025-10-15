@@ -1,6 +1,5 @@
 from asgiref.sync import sync_to_async
-from django.db import connection
-from django.db import connections
+from django.db import connection, connections
 
 
 def check_django_connection():

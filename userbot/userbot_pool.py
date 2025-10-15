@@ -1,10 +1,8 @@
-from typing import Dict
-from typing import Optional
+from typing import Dict, Optional
 
 import structlog
 
-from bot.models import ChannelSubscription
-from bot.models import UserBot
+from bot.models import ChannelSubscription, UserBot
 from userbot.userbot_manager import userbot_manager
 
 logger = structlog.getLogger(__name__)

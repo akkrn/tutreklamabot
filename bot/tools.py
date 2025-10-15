@@ -4,18 +4,16 @@ import logging
 from aiogram import Bot
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import FSInputFile
-from aiogram.types import InlineKeyboardMarkup
-from aiogram.types import Message
+from aiogram.types import FSInputFile, InlineKeyboardMarkup, Message
 from aiohttp import ClientOSError
 
 from bot.constants import MAX_MESSAGE_LENGTH
-from bot.redis_client import delete_file_id
-from bot.redis_client import get_file_id
-from bot.redis_client import save_file_id
-from bot.tg_message_formatter import MARKDOWN_FLAVOR_B
-from bot.tg_message_formatter import markdown_to_telegram_markdown
-from bot.tg_message_formatter import markdown_to_telegram_markdown_chunked
+from bot.redis_client import delete_file_id, get_file_id, save_file_id
+from bot.tg_message_formatter import (
+    MARKDOWN_FLAVOR_B,
+    markdown_to_telegram_markdown,
+    markdown_to_telegram_markdown_chunked,
+)
 
 logger = logging.getLogger(__name__)
 

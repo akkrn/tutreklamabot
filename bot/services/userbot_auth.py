@@ -1,9 +1,11 @@
 import structlog
 from asgiref.sync import sync_to_async
 from telethon import TelegramClient
-from telethon.errors import PhoneCodeInvalidError
-from telethon.errors import PhoneNumberInvalidError
-from telethon.errors import SessionPasswordNeededError
+from telethon.errors import (
+    PhoneCodeInvalidError,
+    PhoneNumberInvalidError,
+    SessionPasswordNeededError,
+)
 
 from bot.models import UserBot
 

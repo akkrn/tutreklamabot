@@ -20,10 +20,12 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path
 
-from bot.health_views import health_check
-from bot.health_views import health_detailed
-from bot.health_views import health_live
-from bot.health_views import health_ready
+from bot.health_views import (
+    health_check,
+    health_detailed,
+    health_live,
+    health_ready,
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
