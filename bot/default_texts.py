@@ -7,4 +7,5 @@ DEFAULT_TEXTS = {
     "support_contact_btn": "Поддержка",
     "search_channels_btn": "Поиск",
     "main_menu_btn": "Главное меню",
+    "change_tariff_btn": "Сменить тариф",
 }

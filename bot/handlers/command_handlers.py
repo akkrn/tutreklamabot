@@ -19,7 +19,9 @@ from bot.handlers.helpers import get_menu
 from bot.handlers.helpers import send_image_message
 from bot.keyboards import add_channels_kb
 from bot.keyboards import back_to_menu_kb
+from bot.keyboards import limit_reached_kb
 from bot.keyboards import support_kb
+from bot.keyboards import tariff_kb
 from bot.keyboards import user_channels_kb
 from bot.middlewares import current_user
 from bot.models import Channel
@@ -38,7 +40,7 @@ logger = structlog.getLogger(__name__)
 
 async def check_channel_limit(
     user: User, new_channels_count: int
-) -> tuple[bool, str]:
+) -> tuple[bool, str, bool]:
     """Проверяет, не превышает ли пользователь лимит каналов"""
     current_channels_count = await sync_to_async(
         lambda: Channel.objects.filter(users=user).count()
@@ -51,7 +53,7 @@ async def check_channel_limit(
         if remaining_slots <= 0:
             return (
                 False,
-                f"Вы уже подписаны на максимальное количество каналов ({MAX_CHANNELS_PER_USER}). Отпишитесь от некоторых каналов, чтобы добавить новые.",
+                f"Достигнут лимит запросов в вашем тарифе. Пожалуйста, смените тариф.\n\nКаналов добавлено: {current_channels_count}/{MAX_CHANNELS_PER_USER}",
             )
         else:
             return (
@@ -166,6 +168,48 @@ async def handle_support(callback: CallbackQuery, state: FSMContext):
     )
 
 
+@router.callback_query(F.data == "change_tariff_btn")
+async def handle_change_tariff(callback: CallbackQuery, state: FSMContext):
+    """Хендлер кнопки 'Сменить тариф'"""
+    tariff_text = (
+        "Оплачивая, вы принимаете [публичную оферту](https://telegra.ph/Publichnaya-oferta-o-zaklyuchenii-dogovora-informacionno-konsultacionnyh-uslug-08-03) "
+        "и соглашение о присоединении к [рекуррентной системе](https://telegra.ph/Soglashenie-o-prisoedinenii-k-rekurrentnoj-sisteme-platezhej-07-24) платежей.\n\n"
+        "Перед оплатой рекомендуем отключить VPN."
+    )
+
+    await send_image_message(
+        message=callback.message,
+        image_name="payment",
+        caption=tariff_text,
+        keyboard=tariff_kb(),
+        edit_message=True,
+    )
+
+
+@router.callback_query(F.data == "tariff_month_30")
+async def handle_tariff_month_30(callback: CallbackQuery, state: FSMContext):
+    """Хендлер кнопки '749 ₽ - Месяц / 30 Каналов'"""
+    await callback.answer(
+        "Функция оплаты будет добавлена в ближайшее время", show_alert=True
+    )
+
+
+@router.callback_query(F.data == "tariff_3month_50")
+async def handle_tariff_3month_50(callback: CallbackQuery, state: FSMContext):
+    """Хендлер кнопки '2290 ₽ - 3 Месяца / 50 Каналов'"""
+    await callback.answer(
+        "Функция оплаты будет добавлена в ближайшее время", show_alert=True
+    )
+
+
+@router.callback_query(F.data == "tariff_6month_70")
+async def handle_tariff_6month_70(callback: CallbackQuery, state: FSMContext):
+    """Хендлер кнопки '4490 ₽ - 6 Месяцев / 70 Каналов'"""
+    await callback.answer(
+        "Функция оплаты будет добавлена в ближайшее время", show_alert=True
+    )
+
+
 @router.message()
 async def handle_channel_links(message: Message, state: FSMContext):
     """Обработчик ссылок на каналы от пользователя"""
@@ -180,7 +224,9 @@ async def handle_channel_links(message: Message, state: FSMContext):
                 user, len(channel_links)
             )
             if not can_add:
-                await message.answer(limit_message)
+                await send_image_message(
+                    message, "limit", limit_message, limit_reached_kb()
+                )
                 return
 
             await message.answer(
@@ -216,7 +262,9 @@ async def handle_channel_links(message: Message, state: FSMContext):
 
     can_add, limit_message = await check_channel_limit(user, len(channel_links))
     if not can_add:
-        await message.answer(limit_message)
+        await send_image_message(
+            message, "limit", limit_message, limit_reached_kb()
+        )
         return
 
     await state.update_data(channel_links=channel_links)

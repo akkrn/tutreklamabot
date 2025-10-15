@@ -45,6 +45,11 @@ def back_to_menu_kb() -> InlineKeyboardMarkup:
     return create_inline_kb("main_menu_btn")
 
 
+def limit_reached_kb() -> InlineKeyboardMarkup:
+    """Клавиатура для сообщения о достижении лимита каналов"""
+    return create_inline_kb("change_tariff_btn", "main_menu_btn", width=1)
+
+
 async def user_channels_kb(user_channels: list) -> InlineKeyboardMarkup:
     """Клавиатура с каналами пользователя и кнопкой отписки"""
     kb_builder = InlineKeyboardBuilder()
@@ -96,3 +101,14 @@ def create_inline_kb(
         kb_builder.row(*buttons, width=width)
 
     return kb_builder.as_markup()
+
+
+def tariff_kb() -> InlineKeyboardMarkup:
+    """Клавиатура с тарифами"""
+    return create_inline_kb(
+        tariff_month_30="749 ₽ - Месяц / 30 Каналов",
+        tariff_3month_50="2290 ₽ - 3 Месяца / 50 Каналов",
+        tariff_6month_70="4490 ₽ - 6 Месяцев / 70 Каналов",
+        main_menu_btn="main_menu_btn",
+        width=1,
+    )
