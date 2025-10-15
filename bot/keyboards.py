@@ -6,6 +6,7 @@ from django.conf import settings
 from bot.translations import get_translation
 
 MENU_BUTTONS: list[str] = [
+    "change_tariff_btn",
     "add_channels_btn",
     "my_channels_btn",
     "digest_btn",
@@ -15,7 +16,7 @@ MENU_BUTTONS: list[str] = [
 
 def menu_kb() -> InlineKeyboardMarkup:
     """Главное меню приложения"""
-    return create_inline_kb(*MENU_BUTTONS, width=2)
+    return create_inline_kb(*MENU_BUTTONS, width=2, separate_first=True)
 
 
 def add_channels_kb() -> InlineKeyboardMarkup:
@@ -109,6 +110,6 @@ def tariff_kb() -> InlineKeyboardMarkup:
         tariff_month_30="749 ₽ - Месяц / 30 Каналов",
         tariff_3month_50="2290 ₽ - 3 Месяца / 50 Каналов",
         tariff_6month_70="4490 ₽ - 6 Месяцев / 70 Каналов",
-        main_menu_btn="main_menu_btn",
+        main_menu_btn=get_translation("main_menu_btn"),
         width=1,
     )
