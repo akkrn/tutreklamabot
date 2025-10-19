@@ -105,10 +105,27 @@ async def send_long(
         txt, max_chunk_size=MAX_MESSAGE_LENGTH, patterns=MARKDOWN_FLAVOR_B
     ):
         if chunk.strip():
-            await bot.send_message(
-                chat_id,
-                chunk,
-                disable_web_page_preview=True,
-                parse_mode=ParseMode.MARKDOWN_V2,
-                reply_markup=reply_markup,
-            )
+            max_retries = 3
+            retry_delay = 2
+
+            for attempt in range(max_retries):
+                try:
+                    await bot.send_message(
+                        chat_id,
+                        chunk,
+                        disable_web_page_preview=True,
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        reply_markup=reply_markup,
+                    )
+                    break
+                except (TelegramAPIError, ClientOSError) as e:
+                    logger.warning(
+                        f"Ошибка отправки сообщения (попытка {attempt + 1}/{max_retries}): {e}"
+                    )
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay * (attempt + 1))
+                    else:
+                        logger.error(
+                            f"Не удалось отправить сообщение после {max_retries} попыток: {e}"
+                        )
+                        raise

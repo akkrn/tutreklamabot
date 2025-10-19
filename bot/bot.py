@@ -6,6 +6,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import BotCommand, BotCommandScopeDefault
 from aiogram.utils.callback_answer import CallbackAnswerMiddleware
+from aiohttp import ClientTimeout
 from django.conf import settings
 
 from bot.ad_notification_handler import AdNotificationHandler
@@ -62,8 +63,21 @@ async def on_shutdown(bot: Bot):
 
 async def build_bot() -> tuple[Bot, Dispatcher]:
     token = settings.BOT_TOKEN
+
+    timeout = ClientTimeout(
+        total=getattr(settings, "BOT_TIMEOUT_TOTAL", 60),  # Общий таймаут
+        connect=getattr(
+            settings, "BOT_TIMEOUT_CONNECT", 30
+        ),  # Таймаут подключения
+        sock_read=getattr(
+            settings, "BOT_TIMEOUT_SOCK_READ", 30
+        ),  # Таймаут чтения
+    )
+
     bot = Bot(
-        token=token, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN)
+        token=token,
+        default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN),
+        session_timeout=timeout,
     )
 
     redis_client = redis.Redis(

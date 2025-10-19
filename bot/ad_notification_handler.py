@@ -99,8 +99,14 @@ class AdNotificationHandler:
             message_text += f"{safe_message_text}\n\n"
 
             sent_count = 0
+            failed_count = 0
+
             for user in users:
                 try:
+                    logger.debug(
+                        f"Отправляем уведомление пользователю {user.tg_user_id} (chat_id: {user.tg_chat_id})"
+                    )
+
                     await send_long(
                         self.bot,
                         user.tg_chat_id,
@@ -108,14 +114,40 @@ class AdNotificationHandler:
                         reply_markup=back_to_menu_kb(),
                     )
                     sent_count += 1
-                except Exception as e:
-                    logger.error(
-                        f"Ошибка отправки уведомления пользователю {user.tg_user_id}: {e}"
+                    logger.debug(
+                        f"Уведомление успешно отправлено пользователю {user.tg_user_id}"
                     )
-                # TODO добавить отправку только активным пользователям и отписку от каналов для него
+
+                except Exception as e:
+                    failed_count += 1
+                    error_type = type(e).__name__
+
+                    # Более детальное логирование в зависимости от типа ошибки
+                    if "timeout" in str(e).lower():
+                        logger.warning(
+                            f"Таймаут при отправке уведомления пользователю {user.tg_user_id} (chat_id: {user.tg_chat_id}): {e}"
+                        )
+                    elif (
+                        "blocked" in str(e).lower()
+                        or "bot was blocked" in str(e).lower()
+                    ):
+                        logger.warning(
+                            f"Пользователь {user.tg_user_id} заблокировал бота: {e}"
+                        )
+                    elif "chat not found" in str(e).lower():
+                        logger.warning(
+                            f"Чат пользователя {user.tg_user_id} не найден: {e}"
+                        )
+                    else:
+                        logger.error(
+                            f"Ошибка отправки уведомления пользователю {user.tg_user_id} (chat_id: {user.tg_chat_id}): {error_type}: {e}"
+                        )
+
+                    # TODO добавить отправку только активным пользователям и отписку от каналов для него
 
             logger.info(
-                f"Отправлено уведомлений о рекламе: {sent_count} из {len(users)} подписчиков канала {channel.title}"
+                f"Отправлено уведомлений о рекламе: {sent_count} из {len(users)} подписчиков канала {channel.title} "
+                f"(неудачных: {failed_count})"
             )
 
         except Exception as e:

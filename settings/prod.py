@@ -39,6 +39,17 @@ BOT_REDIS_DB = int(os.environ.get("BOT_REDIS_DB", "0"))
 # Telegram настройки
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
+# Настройки таймаутов для Telegram Bot API
+BOT_TIMEOUT_TOTAL = int(
+    os.environ.get("BOT_TIMEOUT_TOTAL", "60")
+)  # Общий таймаут в секундах
+BOT_TIMEOUT_CONNECT = int(
+    os.environ.get("BOT_TIMEOUT_CONNECT", "30")
+)  # Таймаут подключения
+BOT_TIMEOUT_SOCK_READ = int(
+    os.environ.get("BOT_TIMEOUT_SOCK_READ", "30")
+)  # Таймаут чтения
+
 # Support
 SUPPORT_USERNAME = os.environ.get("SUPPORT_USERNAME", "support_username")
 
