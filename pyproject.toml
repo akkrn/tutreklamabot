@@ -7,15 +7,22 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "aiogram>=3.22.0",
+    "cryptography>=43,<44",
     "django>=5.2.6",
     "django-cryptography-5>=2.0.3",
-    "psycopg[binary]>=3.2.10",
+    "gunicorn>=23.0.0",
+    "hiredis>=3.3.0",
+    "psycopg[binary]>=3.2.5,<4",
     "python-dotenv>=1.1.1",
     "redis>=6.4.0",
-    "ruff>=0.14.0",
     "structlog>=25.4.0",
     "telegram-text>=0.2.0",
     "telethon>=1.41.2",
+    "uvicorn>=0.37.0",
+]
+
+dev = [
+    "ruff>=0.14.0",
 ]
 
 [tool.ruff]
