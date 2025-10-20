@@ -41,7 +41,7 @@ services:
     command: >
       sh -c "python manage.py migrate &&
              python manage.py collectstatic --noinput &&
-             uvicorn core.asgi:application --host 0.0.0.0 --port 8050"
+             gunicorn core.wsgi:application --config settings/gunicorn.prod.conf.py --bind 0.0.0.0:8050"
     user: root
     volumes:
       - static_volume:/app/staticfiles

@@ -18,4 +18,4 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 EXPOSE 8050
 
-CMD ["uvicorn", "core.asgi:application", "--host", "0.0.0.0", "--port", "8050"]
+CMD ["gunicorn", "core.wsgi:application", "--config", "settings/gunicorn.prod.conf.py", "--bind", "127.0.0.1:8050"]
