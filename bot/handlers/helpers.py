@@ -13,6 +13,7 @@ from aiogram.types import (
     InputMediaPhoto,
     Message,
 )
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.utils import timezone
 
@@ -46,6 +47,21 @@ async def get_menu(
     username = user.username or user.tg_user_id
     user_link = f"tg://resolve?domain={username}"
 
+    # Получаем информацию о тарифе и каналах
+
+    def get_user_info():
+        current_subscription = user.get_subscription_info()
+        tariff_name = current_subscription.get("tariff_name")
+        channels_limit = current_subscription.get("channels_limit")
+
+        channels_count = user.subscribed_channels_count
+
+        return tariff_name, channels_limit, channels_count
+
+    tariff_name, channels_limit, channels_count = await sync_to_async(
+        get_user_info
+    )()
+
     encoded_id = (
         base64.urlsafe_b64encode(str(message.from_user.id).encode())
         .decode()
@@ -57,7 +73,12 @@ async def get_menu(
     if new_msg_text_key:
         caption = get_translation(new_msg_text_key)
     else:
-        caption = f"Пользователь: [{username}]({user_link})\n\nПригласить друга: {ref_link}"
+        caption = (
+            f"Пользователь: [{username}]({user_link})\n\n"
+            f"Тариф: {tariff_name}\n"
+            f"Каналов добавлено: {channels_count}/{channels_limit}\n\n"
+            f"Пригласить друга: {ref_link}"
+        )
 
     if is_from_callback:
         result = await send_image_message(

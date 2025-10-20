@@ -40,7 +40,7 @@ async def check_channel_limit(
 ) -> tuple[bool, str]:
     """Проверяет, не превышает ли пользователь лимит каналов"""
     current_channels_count = await sync_to_async(
-        lambda: Channel.objects.filter(users=user).count()
+        lambda: user.subscribed_channels_count
     )()
 
     # Получаем лимит каналов для текущего тарифа пользователя

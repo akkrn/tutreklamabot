@@ -112,6 +112,11 @@ class User(models.Model):
             "expires_at": current_tariff.expires_at,
         }
 
+    @property
+    def subscribed_channels_count(self):
+        """Количество подписанных каналов"""
+        return self.channels.count()
+
     def __str__(self):
         return f"{self.tg_user_id} {self.username or self.first_name}"
 
