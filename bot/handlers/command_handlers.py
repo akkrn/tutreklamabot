@@ -37,25 +37,28 @@ MAX_CHANNELS_PER_USER = 7
 
 async def check_channel_limit(
     user: User, new_channels_count: int
-) -> tuple[bool, str, bool]:
+) -> tuple[bool, str]:
     """Проверяет, не превышает ли пользователь лимит каналов"""
     current_channels_count = await sync_to_async(
         lambda: Channel.objects.filter(users=user).count()
     )()
 
+    # Получаем лимит каналов для текущего тарифа пользователя
+    channels_limit = await sync_to_async(user.get_channels_limit)()
+
     total_channels = current_channels_count + new_channels_count
 
-    if total_channels > MAX_CHANNELS_PER_USER:
-        remaining_slots = MAX_CHANNELS_PER_USER - current_channels_count
+    if total_channels > channels_limit:
+        remaining_slots = channels_limit - current_channels_count
         if remaining_slots <= 0:
             return (
                 False,
-                f"Достигнут лимит запросов в вашем тарифе. Пожалуйста, смените тариф.\n\nКаналов добавлено: {current_channels_count}/{MAX_CHANNELS_PER_USER}",
+                f"Достигнут лимит запросов в вашем тарифе. Пожалуйста, смените тариф.\n\nКаналов добавлено: {current_channels_count}/{channels_limit}",
             )
         else:
             return (
                 False,
-                f"Вы можете добавить только {remaining_slots} каналов. У вас уже {current_channels_count} из {MAX_CHANNELS_PER_USER}.",
+                f"Вы можете добавить только {remaining_slots} каналов. У вас уже {current_channels_count} из {channels_limit}.",
             )
 
     return True, ""
@@ -95,10 +98,7 @@ async def handle_add_channels(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "main_menu_btn")
 async def handle_main_menu(callback: CallbackQuery, state: FSMContext):
     """Хендлер кнопки 'Главное меню'"""
-    # Убираем кнопку из рекламного сообщения
     await callback.message.edit_reply_markup(reply_markup=None)
-
-    # Отправляем новое сообщение с меню
     await get_menu(callback.message, state, is_from_callback=False)
 
 
@@ -173,37 +173,14 @@ async def handle_change_tariff(callback: CallbackQuery, state: FSMContext):
         "и соглашение о присоединении к [рекуррентной системе](https://telegra.ph/Soglashenie-o-prisoedinenii-k-rekurrentnoj-sisteme-platezhej-07-24) платежей.\n\n"
         "Перед оплатой рекомендуем отключить VPN."
     )
+    keyboard = await tariff_kb()
 
     await send_image_message(
         message=callback.message,
         image_name="payment",
         caption=tariff_text,
-        keyboard=tariff_kb(),
+        keyboard=keyboard,
         edit_message=True,
-    )
-
-
-@router.callback_query(F.data == "tariff_month_30")
-async def handle_tariff_month_30(callback: CallbackQuery, state: FSMContext):
-    """Хендлер кнопки '749 ₽ - Месяц / 30 Каналов'"""
-    await callback.answer(
-        "Функция оплаты будет добавлена в ближайшее время", show_alert=True
-    )
-
-
-@router.callback_query(F.data == "tariff_3month_50")
-async def handle_tariff_3month_50(callback: CallbackQuery, state: FSMContext):
-    """Хендлер кнопки '2290 ₽ - 3 Месяца / 50 Каналов'"""
-    await callback.answer(
-        "Функция оплаты будет добавлена в ближайшее время", show_alert=True
-    )
-
-
-@router.callback_query(F.data == "tariff_6month_70")
-async def handle_tariff_6month_70(callback: CallbackQuery, state: FSMContext):
-    """Хендлер кнопки '4490 ₽ - 6 Месяцев / 70 Каналов'"""
-    await callback.answer(
-        "Функция оплаты будет добавлена в ближайшее время", show_alert=True
     )
 
 
@@ -211,12 +188,9 @@ async def handle_tariff_6month_70(callback: CallbackQuery, state: FSMContext):
 async def handle_channel_links(message: Message, state: FSMContext):
     """Обработчик ссылок на каналы от пользователя"""
     user = current_user.get()
-
-    # Проверяем, пересланное ли сообщение
     if message.forward_from_chat:
         channel_links = handle_forwarded_message(message)
         if channel_links:
-            # Проверяем лимит каналов
             can_add, limit_message = await check_channel_limit(
                 user, len(channel_links)
             )
@@ -239,7 +213,6 @@ async def handle_channel_links(message: Message, state: FSMContext):
             )
             return
 
-    # Обычное сообщение
     if not message.text:
         await message.answer(
             "Отправьте текстовое сообщение со ссылками на каналы или перешлите сообщение из канала."
@@ -270,8 +243,6 @@ async def handle_channel_links(message: Message, state: FSMContext):
         f"Найдено каналов для добавления: {len(channel_links)}\n"
         f"Проверяем доступность и подписываемся..."
     )
-
-    # Обработка ссылок через userbot
     await process_channel_subscription(message, state, channel_links)
 
 
@@ -456,39 +427,3 @@ async def process_channel_subscription(
             keyboard=add_channels_kb(),
         )
         return
-
-
-@router.message()
-async def handle_channel_selection(message: Message, state: FSMContext):
-    """Обработчик выбора канала через кнопку поиска или ввода ссылок"""
-    channel_info = None
-
-    if message.chat_shared:
-        channel_info = message.chat_shared.username
-        if not channel_info:
-            channel_info = f"@{message.chat_shared.chat_id}"
-    elif message.forward_from_chat and message.forward_from_chat.username:
-        channel_info = message.forward_from_chat.username
-    elif message.text:
-        channel_info = message.text
-
-    if not channel_info:
-        await message.answer(
-            "🌝 К сожалению, через поиск нельзя добавлять приватные каналы. Но это можно сделать вручную."
-        )
-        return
-
-    try:
-        channel_links = parse_channel_links(channel_info)
-
-        if not channel_links:
-            await message.answer(
-                "❌ Не удалось распознать ссылки на каналы. Проверьте формат ссылок."
-            )
-            return
-
-        await process_channel_subscription(message, state, channel_links)
-
-    except Exception as e:
-        logger.error(f"Ошибка при обработке канала {channel_info}: {e}")
-        await message.answer(f"❌ Ошибка при добавлении канала: {e}")

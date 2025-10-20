@@ -95,3 +95,13 @@ CORS_ALLOWED_ORIGINS = os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
 CORS_ALLOWED_ORIGINS = [
     origin.strip() for origin in CORS_ALLOWED_ORIGINS if origin.strip()
 ]
+
+# Robokassa настройки
+ROBOKASSA_MERCHANT_LOGIN = os.environ.get("ROBOKASSA_MERCHANT_LOGIN", "")
+ROBOKASSA_PASSWORD1 = os.environ.get("ROBOKASSA_PASSWORD1", "")
+ROBOKASSA_PASSWORD2 = os.environ.get("ROBOKASSA_PASSWORD2", "")
+ROBOKASSA_TEST_MODE = (
+    os.environ.get("ROBOKASSA_TEST_MODE", "True").lower() == "true"
+)
+
+ROBOKASSA_RESULT_URL = os.environ.get("ROBOKASSA_RESULT_URL", "")

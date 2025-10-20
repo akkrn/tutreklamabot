@@ -10,7 +10,12 @@ from aiohttp import ClientTimeout
 from django.conf import settings
 
 from bot.ad_notification_handler import AdNotificationHandler
-from bot.handlers import command_handlers, other_handlers, status_handlers
+from bot.handlers import (
+    command_handlers,
+    other_handlers,
+    payment_handlers,
+    status_handlers,
+)
 from bot.middlewares import (
     CurrentUserMiddleware,
     IgnoreMessageNotModifiedMiddleware,
@@ -92,6 +97,7 @@ async def build_bot() -> tuple[Bot, Dispatcher]:
 
     dp.include_router(command_handlers.router)
     dp.include_router(status_handlers.router)
+    dp.include_router(payment_handlers.router)
 
     # Всегда последний, так как там пустой приемщик
     dp.include_router(other_handlers.router)

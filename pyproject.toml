@@ -15,6 +15,7 @@ dependencies = [
     "psycopg[binary]>=3.2.5,<4",
     "python-dotenv>=1.1.1",
     "redis>=6.4.0",
+    "robokassa>=1.0.8",
     "structlog>=25.4.0",
     "telegram-text>=0.2.0",
     "telethon>=1.41.2",

@@ -1,6 +1,11 @@
+from datetime import timedelta
+
 import structlog
 from django.db import models
+from django.utils import timezone
 from django_cryptography.fields import encrypt
+
+from bot.constants import MAX_CHANNELS_PER_USER
 
 logger = structlog.getLogger(__name__)
 
@@ -74,6 +79,38 @@ class User(models.Model):
         if self.username:
             return f"@{self.username}"
         return self.first_name
+
+    def get_current_tariff(self):
+        """Возвращает текущий активный тариф пользователя"""
+        return self.subscriptions.filter(
+            status=UserSubscription.STATUS_ACTIVE, expires_at__gt=timezone.now()
+        ).first()
+
+    def get_channels_limit(self):
+        """Возвращает лимит каналов для текущего тарифа"""
+        current_tariff = self.get_current_tariff()
+        if current_tariff:
+            return current_tariff.tariff.channels_limit
+        return MAX_CHANNELS_PER_USER
+
+    def get_subscription_info(self):
+        """Возвращает информацию о подписке"""
+        current_tariff = self.get_current_tariff()
+        if not current_tariff:
+            return {
+                "tariff_name": "Бесплатный",
+                "channels_limit": MAX_CHANNELS_PER_USER,
+                "days_remaining": 0,
+                "is_active": False,
+            }
+
+        return {
+            "tariff_name": current_tariff.tariff.name,
+            "channels_limit": current_tariff.tariff.channels_limit,
+            "days_remaining": current_tariff.days_remaining,
+            "is_active": current_tariff.is_active,
+            "expires_at": current_tariff.expires_at,
+        }
 
     def __str__(self):
         return f"{self.tg_user_id} {self.username or self.first_name}"
@@ -266,3 +303,278 @@ class TextTemplate(models.Model):
     class Meta:
         verbose_name = "Шаблон текста"
         verbose_name_plural = "Шаблоны текста"
+
+
+class Tariff(models.Model):
+    """Тарифный план"""
+
+    name = models.CharField(
+        max_length=100,
+        verbose_name="Название тарифа",
+        help_text="Например: Базовый, Премиум, VIP",
+    )
+    price = models.PositiveIntegerField(
+        verbose_name="Цена в рублях", help_text="Цена в рублях"
+    )
+    channels_limit = models.PositiveIntegerField(
+        verbose_name="Лимит каналов",
+        help_text="Максимальное количество каналов для отслеживания",
+    )
+    duration_days = models.PositiveIntegerField(
+        verbose_name="Длительность в днях",
+        help_text="Сколько дней действует тариф (30, 90, 180 и т.д.)",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Активен",
+        help_text="Доступен ли тариф для покупки",
+    )
+    description = models.TextField(
+        blank=True,
+        verbose_name="Описание",
+        help_text="Дополнительное описание тарифа",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Тариф"
+        verbose_name_plural = "Тарифы"
+        ordering = ["price"]
+
+    def __str__(self):
+        return f"{self.name} - {self.get_price_display()}"
+
+    def get_price_display(self):
+        """Возвращает цену в рублях"""
+        return f"{self.price} ₽"
+
+
+class UserSubscription(models.Model):
+    """Подписка пользователя на тариф"""
+
+    STATUS_ACTIVE = "active"
+    STATUS_EXPIRED = "expired"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, "Активна"),
+        (STATUS_EXPIRED, "Истекла"),
+        (STATUS_CANCELLED, "Отменена"),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="subscriptions",
+        verbose_name="Пользователь",
+    )
+    tariff = models.ForeignKey(
+        Tariff,
+        on_delete=models.CASCADE,
+        related_name="user_subscriptions",
+        verbose_name="Тариф",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_ACTIVE,
+        verbose_name="Статус подписки",
+    )
+    started_at = models.DateTimeField(
+        verbose_name="Дата начала подписки", auto_now_add=True
+    )
+    expires_at = models.DateTimeField(verbose_name="Дата окончания подписки")
+    payment_id = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="ID платежа",
+        help_text="Идентификатор платежа в платежной системе",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Подписка пользователя"
+        verbose_name_plural = "Подписки пользователей"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "status"]),
+            models.Index(fields=["expires_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user} - {self.tariff.name} ({self.get_status_display()})"
+
+    @property
+    def is_active(self):
+        """Активна ли подписка"""
+        return (
+            self.status == self.STATUS_ACTIVE
+            and self.expires_at > timezone.now()
+        )
+
+    @property
+    def days_remaining(self):
+        """Сколько дней осталось до окончания"""
+        if self.expires_at <= timezone.now():
+            return 0
+        return (self.expires_at - timezone.now()).days
+
+    def save(self, *args, **kwargs):
+        """Автоматически устанавливает дату окончания при создании"""
+        if not self.pk and not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(
+                days=self.tariff.duration_days
+            )
+        super().save(*args, **kwargs)
+
+
+class Payment(models.Model):
+    """Модель для хранения информации о платежах"""
+
+    STATUS_PENDING = "pending"
+    STATUS_SUCCESS = "success"
+    STATUS_FAILED = "failed"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_REFUNDED = "refunded"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Ожидает оплаты"),
+        (STATUS_SUCCESS, "Успешно оплачен"),
+        (STATUS_FAILED, "Ошибка оплаты"),
+        (STATUS_CANCELLED, "Отменен"),
+        (STATUS_REFUNDED, "Возвращен"),
+    ]
+
+    PAYMENT_TYPE_INITIAL = "initial"
+    PAYMENT_TYPE_RECURRENT = "recurrent"
+    PAYMENT_TYPE_CHOICES = [
+        (PAYMENT_TYPE_INITIAL, "Первоначальный платеж"),
+        (PAYMENT_TYPE_RECURRENT, "Рекурентный платеж"),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="payments",
+        verbose_name="Пользователь",
+    )
+    tariff = models.ForeignKey(
+        Tariff,
+        on_delete=models.CASCADE,
+        related_name="payments",
+        verbose_name="Тариф",
+    )
+    subscription = models.ForeignKey(
+        UserSubscription,
+        on_delete=models.CASCADE,
+        related_name="payments",
+        verbose_name="Подписка",
+        null=True,
+        blank=True,
+    )
+
+    robokassa_invoice_id = models.CharField(
+        max_length=255,
+        unique=True,
+        verbose_name="ID инвойса Robokassa",
+        help_text="Уникальный идентификатор инвойса в системе Robokassa",
+    )
+    robokassa_payment_id = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="ID платежа Robokassa",
+        help_text="Идентификатор платежа в Robokassa",
+    )
+    robokassa_recurring_id = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="ID рекурентного платежа",
+        help_text="Идентификатор рекурентного платежа в Robokassa",
+    )
+    previous_payment = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recurring_payments",
+        verbose_name="Предыдущий платеж",
+        help_text="Ссылка на предыдущий платеж для рекурентных платежей",
+    )
+
+    amount = models.PositiveIntegerField(
+        verbose_name="Сумма в рублях", help_text="Сумма платежа в рублях"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        verbose_name="Статус платежа",
+    )
+    payment_type = models.CharField(
+        max_length=20,
+        choices=PAYMENT_TYPE_CHOICES,
+        default=PAYMENT_TYPE_INITIAL,
+        verbose_name="Тип платежа",
+    )
+    payment_url = models.URLField(
+        blank=True,
+        verbose_name="URL для оплаты",
+        help_text="Ссылка для перехода к оплате",
+    )
+    payment_data = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Данные платежа",
+        help_text="Дополнительные данные платежа в JSON формате",
+    )
+    created_at = models.DateTimeField(
+        verbose_name="Дата создания", auto_now_add=True
+    )
+    updated_at = models.DateTimeField(
+        verbose_name="Дата обновления", auto_now=True
+    )
+    paid_at = models.DateTimeField(
+        verbose_name="Дата оплаты", null=True, blank=True
+    )
+
+    class Meta:
+        verbose_name = "Платеж"
+        verbose_name_plural = "Платежи"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user} - {self.tariff.name} ({self.get_status_display()})"
+
+    @property
+    def amount_rubles(self):
+        """Сумма в рублях"""
+        return self.amount // 100
+
+    def get_amount_display(self):
+        """Возвращает сумму в рублях с валютой"""
+        return f"{self.amount_rubles} ₽"
+
+    def mark_as_success(self, robokassa_payment_id=None):
+        """Отмечает платеж как успешный"""
+        self.status = self.STATUS_SUCCESS
+        self.paid_at = timezone.now()
+        if robokassa_payment_id:
+            self.robokassa_payment_id = robokassa_payment_id
+        self.save()
+
+    def mark_as_failed(self):
+        """Отмечает платеж как неуспешный"""
+        self.status = self.STATUS_FAILED
+        self.save()
+
+    def mark_as_cancelled(self):
+        """Отмечает платеж как отмененный"""
+        self.status = self.STATUS_CANCELLED
+        self.save()
+
+    def mark_as_refunded(self):
+        """Отмечает платеж как возвращенный"""
+        self.status = self.STATUS_REFUNDED
+        self.save()

@@ -1,7 +1,11 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from urllib.parse import urlencode
+
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from asgiref.sync import sync_to_async
 from django.conf import settings
 
+from bot.models import Tariff
 from bot.translations import get_translation
 
 MENU_BUTTONS: list[str] = [
@@ -103,12 +107,46 @@ def create_inline_kb(
     return kb_builder.as_markup()
 
 
-def tariff_kb() -> InlineKeyboardMarkup:
-    """Клавиатура с тарифами"""
-    return create_inline_kb(
-        tariff_month_30="749 ₽ - Месяц / 30 Каналов",
-        tariff_3month_50="2290 ₽ - 3 Месяца / 50 Каналов",
-        tariff_6month_70="4490 ₽ - 6 Месяцев / 70 Каналов",
-        main_menu_btn=get_translation("main_menu_btn"),
-        width=1,
+async def tariff_kb() -> InlineKeyboardMarkup:
+    """Клавиатура с тарифами, каждая кнопка открывает WebApp (Robokassa)."""
+
+    kb_builder = InlineKeyboardBuilder()
+
+    def get_tariff():
+        return list(Tariff.objects.filter(is_active=True).order_by("price"))
+
+    active_tariffs = await sync_to_async(get_tariff)()
+
+    for tariff in active_tariffs:
+        # Текст кнопки: Название тарифа — Цена
+        button_text = f"{tariff.name} — {tariff.get_price_display()}"
+
+        # Формируем ссылку провайдера (Robokassa) для открытия внутри Telegram
+        # Минимально необходимые параметры; при необходимости замените на свои
+        params = {
+            "MerchantLogin": getattr(
+                settings, "ROBOKASSA_MERCHANT_LOGIN", "demo"
+            ),
+            "OutSum": getattr(tariff, "price_rubles", None)
+            or (tariff.price / 100),
+            "InvoiceID": f"tg_tariff_{tariff.id}",
+            "Description": f"Оплата тарифа {tariff.name}",
+            "Culture": "ru",
+        }
+        provider_url = (
+            "https://auth.robokassa.ru/Merchant/Index.aspx?" + urlencode(params)
+        )
+
+        kb_builder.row(
+            InlineKeyboardButton(
+                text=button_text,
+                web_app=WebAppInfo(url=provider_url),
+            )
+        )
+
+    main_menu_text = get_translation("main_menu_btn")
+    kb_builder.row(
+        InlineKeyboardButton(text=main_menu_text, callback_data="main_menu_btn")
     )
+
+    return kb_builder.as_markup()
