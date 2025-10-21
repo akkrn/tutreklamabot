@@ -216,14 +216,13 @@ class UserbotDaemon:
 
         text = message.text.lower()
 
-        # Проверяем обязательные маркеры
-        required_markers = ["erid", "инн", "интеграция"]
+        required_markers = ["erid", "инн", "#реклама", "#партнерскийпост"]
         has_required_marker = any(marker in text for marker in required_markers)
 
-        if not has_required_marker:
-            return False
+        if has_required_marker:
+            logger.info("Обнаружено рекламное сообщение по хештегу/маркеру")
+            return True
 
-        # Список рекламных слов
         ad_words = [
             "авторский",
             "авторского",
@@ -605,28 +604,39 @@ class UserbotDaemon:
             "эксперты",
         ]
 
-        # Подсчитываем количество совпадений
         matches = sum(1 for word in ad_words if word in text)
 
-        # Определяем минимальное количество совпадений в зависимости от длины текста
-        text_length = len(text)
-        if text_length <= 500:
-            min_matches = 4
-        elif text_length <= 1000:
-            min_matches = 5
-        elif text_length <= 1500:
-            min_matches = 6
-        else:
-            min_matches = 7
+        # Проверяем маркеры (ссылки, @, t.me)
+        link_markers = [
+            "https://",
+            "http://",
+            "t.me/",
+            "@",
+            "Реклама",
+            "реклама",
+        ]
+        has_link_marker = any(marker in text for marker in link_markers)
 
-        is_ad = matches >= min_matches
+        if has_link_marker:
+            text_length = len(text)
+            if text_length <= 500:
+                min_matches = 4
+            elif text_length <= 1000:
+                min_matches = 5
+            elif text_length <= 1500:
+                min_matches = 6
+            else:
+                min_matches = 7
 
-        if is_ad:
-            logger.info(
-                f"Обнаружено рекламное сообщение: {matches} совпадений из {min_matches} требуемых"
-            )
+            is_ad = matches >= min_matches
 
-        return is_ad
+            if is_ad:
+                logger.info(
+                    f"Обнаружено рекламное сообщение с маркером ссылки: {matches} совпадений из {min_matches} требуемых"
+                )
+
+            return is_ad
+        return False
 
     async def save_channel_news(self, channel: Channel, message, chat):
         """Сохраняет новость канала в БД и отправляет уведомление"""
