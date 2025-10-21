@@ -10,6 +10,8 @@ import telegram_text
 import telegram_text.bases
 from django.template import Context, Template
 
+from bot.constants import MAX_MESSAGE_LENGTH
+
 type MarkdownPatterns = list[tuple[str, str]]
 MARKDOWN_FLAVOR_A = [
     (r"\*(.*?)\*", "bold"),  # *bold*
@@ -163,3 +165,33 @@ def render_template(template: str, context: dict) -> str:
     ctx = Context(context)
     rendered_template = tpl.render(ctx)
     return rendered_template
+
+
+def split_html_message(
+    text: str, max_length: int = MAX_MESSAGE_LENGTH
+) -> list[str]:
+    """Разбивает HTML сообщение на части по \n\n если превышает max_length"""
+    if len(text) <= max_length:
+        return [text]
+
+    # Разбиваем по \n\n
+    parts = text.split("\n\n")
+    chunks = []
+    current_chunk = ""
+
+    for part in parts:
+        # Если добавление части превысит лимит, сохраняем текущий чанк
+        if current_chunk and len(current_chunk) + len(part) + 2 > max_length:
+            chunks.append(current_chunk.strip())
+            current_chunk = part
+        else:
+            if current_chunk:
+                current_chunk += "\n\n" + part
+            else:
+                current_chunk = part
+
+    # Добавляем последний чанк
+    if current_chunk.strip():
+        chunks.append(current_chunk.strip())
+
+    return chunks

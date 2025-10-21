@@ -1,6 +1,7 @@
 import base64
 from collections import defaultdict
 from datetime import timedelta
+from html import escape
 from pathlib import Path
 
 import structlog
@@ -68,16 +69,20 @@ async def get_menu(
         .rstrip("=")
     )
     bot_user = await message.bot.get_me()
-    ref_link = f"t.me/{bot_user.username}?start=ref_{encoded_id}"
+    user_link_formatted = (
+        f'<a href="{escape(user_link)}">{escape(username)}</a>'
+    )
 
+    ref_link = f"t.me/{bot_user.username}?start=ref_{encoded_id}"
+    ref_text = f"Пригласить друга: <code>{escape(ref_link)}</code>"
     if new_msg_text_key:
         caption = get_translation(new_msg_text_key)
     else:
         caption = (
-            f"Пользователь: [{username}]({user_link})\n\n"
+            f"Пользователь: {user_link_formatted}\n\n"
             f"Тариф: {tariff_name}\n"
             f"Каналов добавлено: {channels_count}/{channels_limit}\n\n"
-            f"Пригласить друга: {ref_link}"
+            f"{ref_text}"
         )
 
     if is_from_callback:
@@ -241,7 +246,7 @@ async def generate_digest_text() -> str:
 
     yesterday = timezone.now() - timedelta(hours=24)
 
-    digest_text = "*Рекламные посты за прошедшие 24 часа:*\n\n"
+    digest_text = "Рекламные посты за прошедшие 24 часа:\n\n"
     max_length = 1000
     current_length = len(digest_text)
     has_news = False
@@ -269,7 +274,7 @@ async def generate_digest_text() -> str:
         safe_channel_title = channel.title
 
         channel_block = (
-            f"[{safe_channel_title}]({channel_link})\n"
+            f"<a href='{channel_link}'>{safe_channel_title}</a>\n"
             if channel_link
             else f"{safe_channel_title}\n"
         )
@@ -283,7 +288,9 @@ async def generate_digest_text() -> str:
                 f"{channel_link}/{news.message_id}" if channel_link else None
             )
             news_link = (
-                f"[Перейти к посту →]({post_link})" if post_link else None
+                f"<a href='{post_link}'>Перейти к посту →</a>"
+                if post_link
+                else None
             )
             news_block = (
                 news_line + (news_link or "") + "\n"

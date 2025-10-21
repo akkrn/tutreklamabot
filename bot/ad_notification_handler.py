@@ -4,7 +4,7 @@ import redis.asyncio as redis
 import structlog
 from django.conf import settings
 
-from bot.keyboards import back_to_menu_kb
+from bot.keyboards import new_menu_kb
 from bot.models import Channel
 from bot.tools import send_long
 from userbot.redis_messages import NewAdMessage, deserialize_message
@@ -95,7 +95,7 @@ class AdNotificationHandler:
             safe_message_text = ad_message.message_text
             safe_channel_title = ad_message.channel_title
 
-            message_text = f"📢 Новый рекламный пост в канале [{safe_channel_title}]({channel_link})\n\n"
+            message_text = f"📢 Новый рекламный пост в канале <a href='{channel_link}'>{safe_channel_title}</a>\n\n"
             message_text += f"{safe_message_text}\n\n"
 
             sent_count = 0
@@ -111,7 +111,7 @@ class AdNotificationHandler:
                         self.bot,
                         user.tg_chat_id,
                         message_text,
-                        reply_markup=back_to_menu_kb(),
+                        reply_markup=new_menu_kb(),
                     )
                     sent_count += 1
                     logger.debug(

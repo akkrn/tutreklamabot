@@ -80,7 +80,7 @@ async def build_bot() -> tuple[Bot, Dispatcher]:
 
     bot = Bot(
         token=token,
-        default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN),
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
         session_timeout=timeout,
     )
 

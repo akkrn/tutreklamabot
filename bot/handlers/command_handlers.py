@@ -98,6 +98,12 @@ async def handle_add_channels(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "main_menu_btn")
 async def handle_main_menu(callback: CallbackQuery, state: FSMContext):
     """Хендлер кнопки 'Главное меню'"""
+    await get_menu(callback.message, state, is_from_callback=True)
+
+
+@router.callback_query(F.data == "new_main_menu_btn")
+async def handle_new_main_menu(callback: CallbackQuery, state: FSMContext):
+    """Хендлер кнопки 'Главное меню'"""
     await callback.message.edit_reply_markup(reply_markup=None)
     await get_menu(callback.message, state, is_from_callback=False)
 
@@ -128,6 +134,7 @@ async def handle_my_channels(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "digest_btn")
 async def handle_digest(callback: CallbackQuery, state: FSMContext):
     """Хендлер кнопки 'Дайджест'"""
+    callback.answer()
     digest_caption = await generate_digest_text()
     # TODO предусмотреть логику, если новостей очень много и не помещаются в одно сообщение
     await send_image_message(
@@ -143,14 +150,14 @@ async def handle_digest(callback: CallbackQuery, state: FSMContext):
 async def handle_support(callback: CallbackQuery, state: FSMContext):
     """Хендлер кнопки 'Помощь'"""
     support_text = (
-        "🌀 **Как это работает?**\n"
+        "🌀 <b>Как это работает?</b>\n"
         "Я отслеживаю телеграм-каналы и присылаю рекламные посты. "
         "Вы видите, кто размещается у конкурентов, и можете предложить рекламу у себя.\n\n"
-        "💬 **Как связаться с рекламодателем?**\n"
+        "💬 <b>Как связаться с рекламодателем?</b>\n"
         "· Если рекламируют канал → контакты в описании.\n"
         "· Сайт → ищите почту или соцсети.\n"
         "· Нет контактов → спросите у админа канала\n\n"
-        "🖖 **Что писать рекламодателю?**\n"
+        "🖖 <b>Что писать рекламодателю?</b>\n"
         "· Опишите свою аудиторию.\n"
         "· Дайте цифры и статистику.\n"
         "· Покажите, чем вы лучше конкурентов."
@@ -169,8 +176,8 @@ async def handle_support(callback: CallbackQuery, state: FSMContext):
 async def handle_change_tariff(callback: CallbackQuery, state: FSMContext):
     """Хендлер кнопки 'Сменить тариф'"""
     tariff_text = (
-        "Оплачивая, вы принимаете [публичную оферту](https://telegra.ph/Publichnaya-oferta-o-zaklyuchenii-dogovora-informacionno-konsultacionnyh-uslug-08-03) "
-        "и соглашение о присоединении к [рекуррентной системе](https://telegra.ph/Soglashenie-o-prisoedinenii-k-rekurrentnoj-sisteme-platezhej-07-24) платежей.\n\n"
+        "Оплачивая, вы принимаете <a href='https://telegra.ph/Publichnaya-oferta-o-zaklyuchenii-dogovora-informacionno-konsultacionnyh-uslug-08-03'>публичную оферту</a> "
+        "и соглашение о присоединении к <a href='https://telegra.ph/Soglashenie-o-prisoedinenii-k-rekurrentnoj-sisteme-platezhej-07-24'>публичную оферту</a> платежей.\n\n"
         "Перед оплатой рекомендуем отключить VPN."
     )
     keyboard = await tariff_kb()
@@ -387,7 +394,7 @@ async def process_channel_subscription(
                 )
 
         if len(successful_channels) == 1 and len(failed_channels) == 0:
-            caption = f"Канал *{successful_channels[0]}* успешно добавлен!"
+            caption = f"Канал <b>{successful_channels[0]}</b> успешно добавлен!"
             await send_image_message(
                 message=message,
                 image_name="one_add",

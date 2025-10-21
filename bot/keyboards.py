@@ -49,6 +49,11 @@ def back_to_menu_kb() -> InlineKeyboardMarkup:
     return create_inline_kb("main_menu_btn")
 
 
+def new_menu_kb() -> InlineKeyboardMarkup:
+    """Клавиатура только с кнопкой назад в главное меню"""
+    return create_inline_kb("new_main_menu_btn")
+
+
 def limit_reached_kb() -> InlineKeyboardMarkup:
     """Клавиатура для сообщения о достижении лимита каналов"""
     return create_inline_kb("change_tariff_btn", "main_menu_btn", width=1)

@@ -2,18 +2,12 @@ import asyncio
 import logging
 
 from aiogram import Bot
-from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import FSInputFile, InlineKeyboardMarkup, Message
 from aiohttp import ClientOSError
 
-from bot.constants import MAX_MESSAGE_LENGTH
 from bot.redis_client import delete_file_id, get_file_id, save_file_id
-from bot.tg_message_formatter import (
-    MARKDOWN_FLAVOR_B,
-    markdown_to_telegram_markdown,
-    markdown_to_telegram_markdown_chunked,
-)
+from bot.tg_message_formatter import split_html_message
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +55,6 @@ async def send_file(
     reply_markup: InlineKeyboardMarkup | None = None,
 ) -> Message:
     """Send files to Telegam servers and collect file_id in Redis cache"""
-    formatted_caption = markdown_to_telegram_markdown(caption)
 
     file_id = await get_file_id(redis_key)
     if file_id:
@@ -69,10 +62,9 @@ async def send_file(
             result = await bot.send_photo(
                 user_tg_id,
                 photo=file_id,
-                caption=formatted_caption,
+                caption=caption,
                 show_caption_above_media=above,
                 reply_markup=reply_markup,
-                parse_mode=ParseMode.MARKDOWN_V2,
             )
             return result
         except TelegramAPIError:
@@ -82,10 +74,9 @@ async def send_file(
         result = await bot.send_photo(
             user_tg_id,
             photo=image_from_pc,
-            caption=formatted_caption,
+            caption=caption,
             show_caption_above_media=above,
             reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN_V2,
         )
         file_id = result.photo[-1].file_id
         await save_file_id(redis_key, file_id)
@@ -101,9 +92,7 @@ async def send_long(
     reply_markup: InlineKeyboardMarkup | None = None,
 ):
     """Хелпер для отправки длинных сообщений кусками. Заодно преобразовывает Markdown в Telegram Markdown v2"""
-    for chunk in markdown_to_telegram_markdown_chunked(
-        txt, max_chunk_size=MAX_MESSAGE_LENGTH, patterns=MARKDOWN_FLAVOR_B
-    ):
+    for chunk in split_html_message(txt):
         if chunk.strip():
             max_retries = 3
             retry_delay = 2
@@ -114,7 +103,6 @@ async def send_long(
                         chat_id,
                         chunk,
                         disable_web_page_preview=True,
-                        parse_mode=ParseMode.MARKDOWN_V2,
                         reply_markup=reply_markup,
                     )
                     break

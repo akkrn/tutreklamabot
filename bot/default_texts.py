@@ -8,4 +8,5 @@ DEFAULT_TEXTS = {
     "search_channels_btn": "Поиск",
     "main_menu_btn": "Главное меню",
     "change_tariff_btn": "Сменить тариф",
+    "new_main_menu_btn": "Главное меню",
 }
