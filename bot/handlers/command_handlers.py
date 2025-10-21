@@ -180,8 +180,8 @@ async def handle_support(callback: CallbackQuery, state: FSMContext):
 async def handle_change_tariff(callback: CallbackQuery, state: FSMContext):
     """Хендлер кнопки 'Сменить тариф'"""
     tariff_text = (
-        "Оплачивая, вы принимаете <a href='https://telegra.ph/Publichnaya-oferta-o-zaklyuchenii-dogovora-informacionno-konsultacionnyh-uslug-08-03'>публичную оферту</a> "
-        "и соглашение о присоединении к <a href='https://telegra.ph/Soglashenie-o-prisoedinenii-k-rekurrentnoj-sisteme-platezhej-07-24'>публичную оферту</a> платежей.\n\n"
+        "Оплачивая, вы принимаете <a href='https://telegra.ph/Publichnaya-oferta-o-zaklyuchenii-dogovora-informacionno-konsultacionnyh-uslug-10-21'>публичную оферту</a> "
+        "и соглашение о присоединении к <a href='https://telegra.ph/Soglashenie-o-prisoedinenii-k-rekurrentnoj-sisteme-platezhej-10-21'>рекуррентной системе</a> платежей.\n\n"
         "Перед оплатой рекомендуем отключить VPN."
     )
     keyboard = await tariff_kb()
