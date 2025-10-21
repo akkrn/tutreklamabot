@@ -119,7 +119,7 @@ async def tariff_kb() -> InlineKeyboardMarkup:
 
     for tariff in active_tariffs:
         # Текст кнопки: Название тарифа — Цена
-        button_text = f"{tariff.name} — {tariff.get_price_display()}"
+        button_text = f"{tariff.get_price_display()} — {tariff.channels_limit} Каналов ({tariff.duration_days} дней)"
 
         # Формируем ссылку провайдера (Robokassa) для открытия внутри Telegram
         # Минимально необходимые параметры; при необходимости замените на свои
