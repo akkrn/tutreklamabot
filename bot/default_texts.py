@@ -9,4 +9,6 @@ DEFAULT_TEXTS = {
     "main_menu_btn": "Главное меню",
     "change_tariff_btn": "Сменить тариф",
     "new_main_menu_btn": "Главное меню",
+    "cancel_reccurent_btn": "Отключить автоплатеж",
+    "cancel_reccurent_done_btn": "Отключить автоплатеж",
 }

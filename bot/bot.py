@@ -24,21 +24,14 @@ from core.event_manager import EventType, event_manager
 logger = structlog.getLogger(__name__)
 
 COMMANDS_RU = [
-    BotCommand(command="start", description="Перезапустить бота"),
-]
-
-COMMANDS_EN = [
-    BotCommand(command="start", description="Restart the bot"),
+    BotCommand(command="menu", description="Главное меню"),
 ]
 
 
 async def on_startup(bot: Bot):
     await bot.delete_my_commands(scope=BotCommandScopeDefault())
 
-    await bot.set_my_commands(
-        COMMANDS_RU, scope=BotCommandScopeDefault(), language_code="ru"
-    )
-    await bot.set_my_commands(COMMANDS_EN, scope=BotCommandScopeDefault())
+    await bot.set_my_commands(COMMANDS_RU, scope=BotCommandScopeDefault())
 
     global ad_handler
     ad_handler = AdNotificationHandler(bot)
@@ -101,7 +94,7 @@ async def build_bot() -> tuple[Bot, Dispatcher]:
     dp.include_router(other_handlers.router)
 
     dp.update.middleware(CurrentUserMiddleware())
-    dp.callback_query.middleware(CallbackAnswerMiddleware())
+    dp.callback_query.middleware(CallbackAnswerMiddleware(pre=True))
     dp.callback_query.middleware(IgnoreMessageNotModifiedMiddleware())
 
     dp.startup.register(on_startup)

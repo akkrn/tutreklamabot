@@ -5,6 +5,7 @@ from datetime import timedelta
 import structlog
 from aiogram import F, Router
 from aiogram.filters import CommandObject, CommandStart
+from aiogram.filters.command import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
@@ -18,7 +19,9 @@ from bot.handlers.helpers import (
 from bot.keyboards import (
     add_channels_kb,
     back_to_menu_kb,
+    cancel_reccurent_kb,
     limit_reached_kb,
+    new_menu_kb,
     support_kb,
     tariff_kb,
     user_channels_kb,
@@ -71,17 +74,18 @@ async def start(message: Message, state: FSMContext, command: CommandObject):
     if command.args:
         await handle_start_referrals(message, user, command.args)
 
-    user_channels_count = await user.channels.acount()
+    await send_image_message(
+        message=message,
+        image_name="add_channels",
+        caption="",
+        keyboard=add_channels_kb(),
+    )
 
-    if user_channels_count == 0:
-        await send_image_message(
-            message=message,
-            image_name="add_channels",
-            caption="",
-            keyboard=add_channels_kb(),
-        )
-    else:
-        await get_menu(message, state)
+
+@router.message(Command("menu"))
+async def menu_command(message: Message, state: FSMContext):
+    """Хендлер команды /menu - показывает главное меню"""
+    await get_menu(message, state)
 
 
 @router.callback_query(F.data == "add_channels_btn")
@@ -189,6 +193,42 @@ async def handle_change_tariff(callback: CallbackQuery, state: FSMContext):
         keyboard=keyboard,
         edit_message=True,
     )
+
+
+@router.callback_query(F.data == "cancel_reccurent_btn")
+async def handle_cancel_reccurent(callback: CallbackQuery, state: FSMContext):
+    """Хендлер кнопки 'Отменить подписку'"""
+    cancel_reccurent_text = (
+        "❤️ <b>Внимание!</b> При отключении — ваш тариф сохранится до конца оплаченного срока\n\n"
+        "Отключаем?"
+    )
+
+    await send_image_message(
+        message=callback.message,
+        image_name="cancel_subscription",
+        caption=cancel_reccurent_text,
+        keyboard=cancel_reccurent_kb(),
+        edit_message=True,
+    )
+
+
+@router.callback_query(F.data == "cancel_reccurent_done_btn")
+async def handle_cancel_reccurent_done(
+    callback: CallbackQuery, state: FSMContext
+):
+    """Хендлер кнопки 'Отключить автоплатеж' и подтверждения"""
+    cancel_reccurent_text = (
+        "Автоплатеж отключен. Спасибо за использование нашего сервиса!"
+    )
+
+    await send_image_message(
+        message=callback.message,
+        image_name="cancel_subscription_done",
+        caption=cancel_reccurent_text,
+        keyboard=new_menu_kb(),
+        edit_message=True,
+    )
+    # TODO какая-то логика отключение подписки
 
 
 @router.message()

@@ -44,6 +44,13 @@ def support_kb() -> InlineKeyboardMarkup:
     return kb_builder.as_markup()
 
 
+def cancel_reccurent_kb() -> InlineKeyboardMarkup:
+    """Клавиатура для экрана отмены подписки"""
+    return create_inline_kb(
+        "cancel_reccurent_done_btn", "main_menu_btn", width=1
+    )
+
+
 def back_to_menu_kb() -> InlineKeyboardMarkup:
     """Клавиатура только с кнопкой назад в главное меню"""
     return create_inline_kb("main_menu_btn")
@@ -148,6 +155,12 @@ async def tariff_kb() -> InlineKeyboardMarkup:
                 web_app=WebAppInfo(url=provider_url),
             )
         )
+    cancel_reccurent_text = get_translation("cancel_reccurent_btn")
+    kb_builder.row(
+        InlineKeyboardButton(
+            text=cancel_reccurent_text, callback_data="cancel_reccurent_btn"
+        )
+    )
 
     main_menu_text = get_translation("main_menu_btn")
     kb_builder.row(

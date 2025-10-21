@@ -41,8 +41,8 @@ async def get_menu(
         msg_start_upload_btn_id=None,
         msg_upload_btn_id=None,
     )
-    data = await state.get_data()
-    prev_menu_id: int | None = data.get("menu_msg_id")
+    # data = await state.get_data()
+    # prev_menu_id: int | None = data.get("menu_msg_id")
 
     user = current_user.get()
     username = user.username or user.tg_user_id
@@ -86,33 +86,33 @@ async def get_menu(
         )
 
     if is_from_callback:
-        result = await send_image_message(
+        await send_image_message(
             message=message,
             image_name="main_menu",
             caption=caption,
             keyboard=menu_kb(),
             edit_message=True,
         )
-        if result:
-            if prev_menu_id and prev_menu_id != result.message_id:
-                await safe_delete_message(
-                    message.bot, message.chat.id, prev_menu_id
-                )  # TODO проверить, что стоит так делать
-            await state.update_data(menu_msg_id=result.message_id)
+        # if result:
+        #     if prev_menu_id and prev_menu_id != result.message_id:
+        #         await safe_delete_message(
+        #             message.bot, message.chat.id, prev_menu_id
+        #         )  # TODO проверить, что стоит так делать
+        #     await state.update_data(menu_msg_id=result.message_id)
     else:
-        result = await send_image_message(
+        await send_image_message(
             message=message,
             image_name="main_menu",
             caption=caption,
             keyboard=menu_kb(),
             edit_message=False,
         )
-        if result:
-            if prev_menu_id and prev_menu_id != result.message_id:
-                await safe_delete_message(
-                    message.bot, message.chat.id, prev_menu_id
-                )
-            await state.update_data(menu_msg_id=result.message_id)
+        # if result:
+        #     if prev_menu_id and prev_menu_id != result.message_id:
+        #         await safe_delete_message(
+        #             message.bot, message.chat.id, prev_menu_id
+        #         )
+        #     await state.update_data(menu_msg_id=result.message_id)
 
 
 async def safe_delete_message(bot: Bot, chat_id: int, message_id: int) -> None:
