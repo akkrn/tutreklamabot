@@ -7,13 +7,14 @@ from telethon import TelegramClient, events
 from telethon.errors import AuthKeyUnregisteredError, SessionRevokedError
 from telethon.tl.functions.channels import JoinChannelRequest
 
-from bot.models import UserBot
+from bot.models import ChannelNews, UserBot
 from core.event_manager import EventType, event_manager
 from userbot.redis_messages import (
     NewAdMessage,
     SubscribeChannelsMessage,
     SubscribeResponseMessage,
 )
+from utils.advertisement_detector import is_advertisement
 
 logger = structlog.getLogger(__name__)
 
@@ -151,22 +152,19 @@ class UserbotManager:
             )
 
             if not channel:
+                logger.warning(
+                    f"❌ Канал с ID {message.peer_id.channel_id} не найден в БД"
+                )
                 return
-
-            # Проверяем, является ли сообщение рекламой
-            if not await self._is_ad_message(message):
+            is_ad = await self._is_ad_message(message)
+            if not is_ad:
                 return
-
-            # Создаем новость
-            from bot.models import ChannelNews
 
             await ChannelNews.objects.acreate(
                 channel=channel,
                 message_id=message.id,
                 message=message.text or "",
             )
-
-            # Отправляем уведомление
             ad_message = NewAdMessage(
                 channel_id=channel.telegram_id,
                 channel_title=channel.title,
@@ -181,20 +179,27 @@ class UserbotManager:
                 EventType.NEW_AD_MESSAGE, ad_message, "bot:new_ad"
             )
 
-            logger.debug(f"Обработано рекламное сообщение из {channel.title}")
+            logger.info(
+                f"🎉 Успешно обработано рекламное сообщение из {channel.title} (ID: {message.id})"
+            )
 
         except Exception as e:
             logger.error(f"Ошибка обработки сообщения: {e}")
 
     async def _run_userbot(self, userbot: UserBot, client: TelegramClient):
         """Запускает юзербот и обрабатывает события"""
+        logger.info(f"🚀 Запускаем юзербот {userbot.name} (ID: {userbot.id})")
         try:
+            logger.info(
+                f"📡 Юзербот {userbot.name} подключен и слушает сообщения..."
+            )
             await client.run_until_disconnected()
+            logger.warning(f"⚠️ Юзербот {userbot.name} отключился")
         except (AuthKeyUnregisteredError, SessionRevokedError) as e:
-            logger.warning(f"Сессия юзербота {userbot.name} отозвана: {e}")
+            logger.warning(f"🔑 Сессия юзербота {userbot.name} отозвана: {e}")
             await self._handle_session_error(userbot, str(e))
         except Exception as e:
-            logger.error(f"Ошибка в юзерботе {userbot.name}: {e}")
+            logger.error(f"❌ Ошибка в юзерботе {userbot.name}: {e}")
             await self._handle_userbot_error(userbot, str(e))
 
     async def _monitor_userbots(self):
@@ -288,17 +293,8 @@ class UserbotManager:
 
     async def _is_ad_message(self, message) -> bool:
         """Проверяет, является ли сообщение рекламой"""
-        # Простая проверка по ключевым словам
-        text = (message.text or "").lower()
-        ad_keywords = [
-            "реклама",
-            "реклам",
-            "рекламн",
-            "рекламное",
-            "рекламный",
-            "рекламная",
-        ]
-        return any(keyword in text for keyword in ad_keywords)
+
+        return is_advertisement(message.text)
 
     async def add_userbot(self, userbot: UserBot):
         """Добавляет новый юзербот"""
