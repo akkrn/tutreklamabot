@@ -2,12 +2,17 @@ import asyncio
 import logging
 
 from aiogram import Bot
+from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import FSInputFile, InlineKeyboardMarkup, Message
 from aiohttp import ClientOSError
 
+from bot.constants import MAX_MESSAGE_LENGTH
 from bot.redis_client import delete_file_id, get_file_id, save_file_id
-from bot.tg_message_formatter import split_html_message
+from bot.tg_message_formatter import (
+    MARKDOWN_FLAVOR_B,
+    markdown_to_telegram_markdown_chunked,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +97,9 @@ async def send_long(
     reply_markup: InlineKeyboardMarkup | None = None,
 ):
     """Хелпер для отправки длинных сообщений кусками. Заодно преобразовывает Markdown в Telegram Markdown v2"""
-    for chunk in split_html_message(txt):
+    for chunk in markdown_to_telegram_markdown_chunked(
+        txt, max_chunk_size=MAX_MESSAGE_LENGTH, patterns=MARKDOWN_FLAVOR_B
+    ):
         if chunk.strip():
             max_retries = 3
             retry_delay = 2
@@ -104,6 +111,7 @@ async def send_long(
                         chunk,
                         disable_web_page_preview=True,
                         reply_markup=reply_markup,
+                        parse_mode=ParseMode.MARKDOWN_V2,
                     )
                     break
                 except (TelegramAPIError, ClientOSError) as e:
