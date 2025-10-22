@@ -71,7 +71,7 @@ async def user_channels_kb(user_channels: list) -> InlineKeyboardMarkup:
     kb_builder = InlineKeyboardBuilder()
     buttons = []
     for channel in user_channels:
-        button_text = f"{channel.title} ❌"
+        button_text = f"❌ {channel.title}"
         callback_data = f"unsubscribe_{channel.id}"
         buttons.append(
             InlineKeyboardButton(text=button_text, callback_data=callback_data)
