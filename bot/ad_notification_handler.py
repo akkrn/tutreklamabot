@@ -95,7 +95,7 @@ class AdNotificationHandler:
             safe_message_text = ad_message.message_text
             safe_channel_title = ad_message.channel_title
 
-            message_text = f"📢 Новый рекламный пост в канале <a href='{channel_link}'>{safe_channel_title}</a>\n\n"
+            message_text = f"📢 Новый рекламный пост в канале [{safe_channel_title}]({channel_link})\n\n"
             message_text += f"{safe_message_text}\n\n"
 
             sent_count = 0
