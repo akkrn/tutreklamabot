@@ -7,7 +7,7 @@ from aiogram import F, Router
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.filters.command import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from asgiref.sync import sync_to_async
 from django.utils import timezone
 
@@ -18,6 +18,8 @@ from bot.handlers.helpers import (
 )
 from bot.keyboards import (
     add_channels_kb,
+    add_channels_with_menu_kb,
+    add_more_channels_kb,
     back_to_menu_kb,
     cancel_reccurent_kb,
     limit_reached_kb,
@@ -56,12 +58,12 @@ async def check_channel_limit(
         if remaining_slots <= 0:
             return (
                 False,
-                f"Достигнут лимит запросов в вашем тарифе. Пожалуйста, смените тариф.\n\nКаналов добавлено: {current_channels_count}/{channels_limit}",
+                f"<b>Достигнут лимит запросов в вашем тарифе.</b> Пожалуйста, смените тариф.\n\n<b>Каналов добавлено:</b> {current_channels_count}/{channels_limit}",
             )
         else:
             return (
                 False,
-                f"Вы можете добавить только {remaining_slots} каналов. У вас уже {current_channels_count} из {channels_limit}.",
+                f"Количество каналов, которые вы можете добавить: {remaining_slots}.\n\nУ вас уже {current_channels_count} из {channels_limit}.",
             )
 
     return True, ""
@@ -93,7 +95,7 @@ async def handle_add_channels(callback: CallbackQuery, state: FSMContext):
     await send_image_message(
         message=callback.message,
         image_name="search",
-        caption="Отправьте ссылку на канал или несколько ссылок (каждую с новой строки)",
+        caption="Отправьте одну или несколько ссылок через пробел и бот начнёт отслеживать рекламные посты в этих каналах.",
         keyboard=back_to_menu_kb(),
         edit_message=True,
     )
@@ -122,7 +124,7 @@ async def handle_my_channels(callback: CallbackQuery, state: FSMContext):
         caption = "У вас пока нет добавленных каналов."
         keyboard = add_channels_kb()
     else:
-        caption = "Для удаления канала — нажмите на него."
+        caption = "<b>Для удаления канала</b> — нажмите на него."
         channels = await sync_to_async(list)(user.channels.all())
         keyboard = await user_channels_kb(channels)
 
@@ -153,19 +155,18 @@ async def handle_digest(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "support_btn")
 async def handle_support(callback: CallbackQuery, state: FSMContext):
     """Хендлер кнопки 'Помощь'"""
-    support_text = (
-        "🌀 <b>Как это работает?</b>\n"
-        "Я отслеживаю телеграм-каналы и присылаю рекламные посты. "
-        "Вы видите, кто размещается у конкурентов, и можете предложить рекламу у себя.\n\n"
-        "💬 <b>Как связаться с рекламодателем?</b>\n"
-        "· Если рекламируют канал → контакты в описании.\n"
-        "· Сайт → ищите почту или соцсети.\n"
-        "· Нет контактов → спросите у админа канала\n\n"
-        "🖖 <b>Что писать рекламодателю?</b>\n"
-        "· Опишите свою аудиторию.\n"
-        "· Дайте цифры и статистику.\n"
-        "· Покажите, чем вы лучше конкурентов."
-    )
+    support_text = """<b>Как это работает?</b>
+Бот отслеживает телеграм-каналы и присылает рекламные посты. Вы видите, кто размещается у конкурентов, и можете предложить рекламу у себя.
+
+<b>Как связаться с рекламодателем?</b>
+· Если рекламируют канал → контакты в описании;
+· Сайт → ищите почту или соцсети;
+· Нет контактов → спросите у админа канала.
+
+<b>Что писать рекламодателю?</b>
+· Опишите свою аудиторию;
+· Дайте цифры и статистику;
+· Покажите, чем вы лучше конкурентов."""
 
     await send_image_message(
         message=callback.message,
@@ -439,27 +440,45 @@ async def process_channel_subscription(
                 message=message,
                 image_name="one_add",
                 caption=caption,
-                keyboard=back_to_menu_kb(),
+                keyboard=add_more_channels_kb(),
             )
-        elif len(successful_channels) > 1:
-            caption = f"Успешно добавлено каналов: {len(successful_channels)}"
-            if failed_channels:
-                caption += f"\nНе удалось добавить: {len(failed_channels)}"
+        elif len(successful_channels) > 1 and len(failed_channels) == 0:
+
+            def get_user_info():
+                user = current_user.get()
+                current_subscription = user.get_subscription_info()
+                channels_limit = current_subscription.get("channels_limit")
+                channels_count = user.subscribed_channels_count
+                return channels_limit, channels_count
+
+            channels_limit, channels_count = await sync_to_async(
+                get_user_info
+            )()
+
+            caption = f"""<b>Чудесно!</b> ✨ Теперь вы будете получать уведомления о рекламе из этих каналов.
+
+            <b>Каналов добавлено:</b> {channels_count}/{channels_limit}"""
             await send_image_message(
                 message=message,
                 image_name="many_add",
                 caption=caption,
-                keyboard=back_to_menu_kb(),
+                keyboard=add_more_channels_kb(),
             )
-        else:
-            caption = "Не удалось добавить каналы:\n" + "\n".join(
-                failed_channels
-            )
+        elif len(successful_channels) > 1:
+            caption = f"<b>Где-то допущена ошибка.</b> Все каналы добавлены, кроме:\n\n {'\n'.join(failed_channels)}"
             await send_image_message(
                 message=message,
-                image_name="add_channels",
+                image_name="almost",
                 caption=caption,
-                keyboard=add_channels_kb(),
+                keyboard=add_more_channels_kb(),
+            )
+        else:
+            caption = "<b>Каналы не найдены.</b> Возможно, вы пропустили пробелы между ссылками."
+            await send_image_message(
+                message=message,
+                image_name="error",
+                caption=caption,
+                keyboard=add_channels_with_menu_kb(),
             )
             return
 
@@ -469,8 +488,15 @@ async def process_channel_subscription(
         )
         await send_image_message(
             message=message,
-            image_name="add_channels",
+            image_name="error",
             caption="Произошла ошибка при добавлении каналов. Попробуйте еще раз.",
-            keyboard=add_channels_kb(),
+            keyboard=add_channels_with_menu_kb(),
         )
         return
+
+
+@router.message(Command("remove"))
+async def cmd_remove(message: Message, state: FSMContext):
+    await message.answer(
+        text="Клавиатура удалена", reply_markup=ReplyKeyboardRemove()
+    )

@@ -249,7 +249,6 @@ async def generate_digest_text() -> str:
     digest_text = "Рекламные посты за прошедшие 24 часа:\n\n"
     max_length = 1000
     current_length = len(digest_text)
-    has_news = False
 
     channels_news = defaultdict(list)
     user_news = (
@@ -264,7 +263,6 @@ async def generate_digest_text() -> str:
         channels_news[news.channel].append(news)
 
     for channel, news_list in channels_news.items():
-        has_news = True
         channel_link = (
             f"https://t.me/{channel.main_username}"
             if channel.main_username
@@ -309,8 +307,5 @@ async def generate_digest_text() -> str:
 
         digest_text += channel_block + "\n"
         current_length += len(channel_block) + 1
-
-    if not has_news:
-        digest_text += "За последние 24 часа новых рекламных постов не было."
 
     return digest_text

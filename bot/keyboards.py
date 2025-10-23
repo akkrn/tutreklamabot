@@ -56,6 +56,18 @@ def back_to_menu_kb() -> InlineKeyboardMarkup:
     return create_inline_kb("main_menu_btn")
 
 
+def add_more_channels_kb() -> InlineKeyboardMarkup:
+    """Клавиатура с кнопкой назад и добавить еще"""
+    return create_inline_kb(
+        "main_menu_btn", width=1, add_channels_btn="Добавить еще"
+    )
+
+
+def add_channels_with_menu_kb() -> InlineKeyboardMarkup:
+    """Клавиатура с кнопкой назад и добавить еще"""
+    return create_inline_kb("main_menu_btn", "add_channels_btn", width=1)
+
+
 def new_menu_kb() -> InlineKeyboardMarkup:
     """Клавиатура только с кнопкой назад в главное меню"""
     return create_inline_kb("new_main_menu_btn")
