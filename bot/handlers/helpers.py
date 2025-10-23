@@ -36,7 +36,7 @@ async def get_menu(
     is_from_callback: bool = False,
 ):
     """Показывает единое главное меню"""
-    await state.set_state()
+    await state.clear()
     await state.update_data(
         msg_start_upload_btn_id=None,
         msg_upload_btn_id=None,

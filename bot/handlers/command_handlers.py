@@ -30,6 +30,7 @@ from bot.keyboards import (
 )
 from bot.middlewares import current_user
 from bot.models import Channel, ChannelSubscription, User
+from bot.states import AddChannelsStates
 from bot.utils.link_parser import handle_forwarded_message, parse_channel_links
 from core.event_manager import EventType, event_manager
 from userbot.redis_messages import ChannelResult, SubscribeChannelsMessage
@@ -72,7 +73,7 @@ async def check_channel_limit(
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext, command: CommandObject):
     user = current_user.get()
-
+    await state.clear()
     if command.args:
         await handle_start_referrals(message, user, command.args)
 
@@ -92,6 +93,8 @@ async def menu_command(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "add_channels_btn")
 async def handle_add_channels(callback: CallbackQuery, state: FSMContext):
+    """Обработчик кнопки 'Добавить канал' - устанавливает состояние ожидания ссылок"""
+    await state.set_state(AddChannelsStates.waiting_for_links)
     await send_image_message(
         message=callback.message,
         image_name="search",
@@ -254,12 +257,17 @@ async def handle_channel_links(message: Message, state: FSMContext):
             )
             await state.update_data(channel_links=channel_links)
             await process_channel_subscription(message, state, channel_links)
+            await state.clear()
             return
         else:
             await message.answer(
                 "Не удалось извлечь ссылку на канал из пересланного сообщения."
             )
             return
+
+    current_state = await state.get_state()
+    if current_state != AddChannelsStates.waiting_for_links:
+        return
 
     if not message.text:
         await message.answer(
@@ -292,6 +300,8 @@ async def handle_channel_links(message: Message, state: FSMContext):
         f"Проверяем доступность и подписываемся..."
     )
     await process_channel_subscription(message, state, channel_links)
+
+    await state.clear()
 
 
 @router.callback_query(F.data.startswith("unsubscribe_"))
