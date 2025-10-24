@@ -298,13 +298,10 @@ async def generate_digest_text_paginated(
         full_channel_block = channel_header + channel_content
         all_channel_blocks.append(full_channel_block)
 
-    # Добавляем заголовок
-    header = "*Рекламные посты за прошедшие 24 часа:*\n\n"
-
     # Разделяем на страницы по max_length
     pages = []
     current_page = ""
-    current_length = len(header)
+    current_length = 0
 
     for channel_block in all_channel_blocks:
         channel_block_with_separator = channel_block + "\n"
@@ -316,22 +313,25 @@ async def generate_digest_text_paginated(
         else:
             # Если блок не помещается, сохраняем текущую страницу и начинаем новую
             if current_page:
-                pages.append((header + current_page).rstrip())
+                pages.append((current_page).rstrip())
 
             # Проверяем, помещается ли блок на новую страницу
-            if len(header + channel_block_with_separator) <= max_length:
+            if len(channel_block_with_separator) <= max_length:
                 current_page = channel_block_with_separator
-                current_length = len(header + current_page)
+                current_length = len(current_page)
             else:
                 # Блок слишком большой, обрезаем его
-                available_space = max_length - len(header)
+                available_space = max_length
                 truncated_block = channel_block_with_separator[:available_space]
                 current_page = truncated_block
-                current_length = len(header + current_page)
+                current_length = len(current_page)
 
     # Добавляем последнюю страницу
     if current_page:
-        pages.append((header + current_page).rstrip())
+        pages.append((current_page).rstrip())
+
+    if not pages:
+        return "❤️ *Новых постов ещё не было*. Возвращайтесь позже.", 0
 
     total_pages = len(pages)
 
