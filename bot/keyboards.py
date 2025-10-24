@@ -117,7 +117,7 @@ async def user_channels_kb(
         prev_page = (page - 1) % total_pages
         pagination_buttons.append(
             InlineKeyboardButton(
-                text="◀️", callback_data=f"channels_page_{prev_page}"
+                text="Назад", callback_data=f"channels_page_{prev_page}"
             )
         )
 
@@ -132,7 +132,7 @@ async def user_channels_kb(
         next_page = (page + 1) % total_pages
         pagination_buttons.append(
             InlineKeyboardButton(
-                text="▶️", callback_data=f"channels_page_{next_page}"
+                text="Далее", callback_data=f"channels_page_{next_page}"
             )
         )
 
@@ -157,7 +157,7 @@ def digest_kb(page: int = 0, total_pages: int = 1) -> InlineKeyboardMarkup:
         prev_page = (page - 1) % total_pages
         pagination_buttons.append(
             InlineKeyboardButton(
-                text="◀️", callback_data=f"digest_page_{prev_page}"
+                text="Назад", callback_data=f"digest_page_{prev_page}"
             )
         )
 
@@ -172,7 +172,7 @@ def digest_kb(page: int = 0, total_pages: int = 1) -> InlineKeyboardMarkup:
         next_page = (page + 1) % total_pages
         pagination_buttons.append(
             InlineKeyboardButton(
-                text="▶️", callback_data=f"digest_page_{next_page}"
+                text="Далее", callback_data=f"digest_page_{next_page}"
             )
         )
 
