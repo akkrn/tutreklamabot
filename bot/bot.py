@@ -62,12 +62,12 @@ async def build_bot() -> tuple[Bot, Dispatcher]:
     token = settings.BOT_TOKEN
 
     timeout = ClientTimeout(
-        total=getattr(settings, "BOT_TIMEOUT_TOTAL", 60),  # Общий таймаут
+        total=getattr(settings, "BOT_TIMEOUT_TOTAL", 180),  # Общий таймаут
         connect=getattr(
             settings, "BOT_TIMEOUT_CONNECT", 30
         ),  # Таймаут подключения
         sock_read=getattr(
-            settings, "BOT_TIMEOUT_SOCK_READ", 30
+            settings, "BOT_TIMEOUT_SOCK_READ", 150
         ),  # Таймаут чтения
     )
 

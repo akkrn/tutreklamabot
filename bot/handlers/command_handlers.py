@@ -4,7 +4,8 @@ from datetime import timedelta
 
 import structlog
 from aiogram import F, Router
-from aiogram.filters import CommandObject, CommandStart
+from aiogram.enums import ParseMode
+from aiogram.filters import CommandObject, CommandStart, StateFilter
 from aiogram.filters.command import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
@@ -12,7 +13,7 @@ from asgiref.sync import sync_to_async
 from django.utils import timezone
 
 from bot.handlers.helpers import (
-    generate_digest_text,
+    generate_digest_text_paginated,
     get_menu,
     send_image_message,
 )
@@ -22,6 +23,7 @@ from bot.keyboards import (
     add_more_channels_kb,
     back_to_menu_kb,
     cancel_reccurent_kb,
+    digest_kb,
     limit_reached_kb,
     new_menu_kb,
     support_kb,
@@ -30,7 +32,7 @@ from bot.keyboards import (
 )
 from bot.middlewares import current_user
 from bot.models import Channel, ChannelSubscription, User
-from bot.states import AddChannelsStates
+from bot.states import AddChannelsStates, ChannelsStates, DigestStates
 from bot.utils.link_parser import handle_forwarded_message, parse_channel_links
 from core.event_manager import EventType, event_manager
 from userbot.redis_messages import ChannelResult, SubscribeChannelsMessage
@@ -129,7 +131,12 @@ async def handle_my_channels(callback: CallbackQuery, state: FSMContext):
     else:
         caption = "<b>Для удаления канала</b> — нажмите на него."
         channels = await sync_to_async(list)(user.channels.all())
-        keyboard = await user_channels_kb(channels)
+        keyboard = await user_channels_kb(channels, page=0)
+
+        await state.set_state(ChannelsStates.viewing_channels)
+        await state.update_data(
+            channels_page=0, user_channels_ids=[ch.id for ch in channels]
+        )
 
     await send_image_message(
         message=callback.message,
@@ -140,19 +147,81 @@ async def handle_my_channels(callback: CallbackQuery, state: FSMContext):
     )
 
 
+@router.callback_query(
+    F.data.startswith("channels_page_"),
+    StateFilter(ChannelsStates.viewing_channels),
+)
+async def handle_channels_pagination(
+    callback: CallbackQuery, state: FSMContext
+):
+    """Обработчик пагинации для моих каналов"""
+    page = int(callback.data.split("_")[-1])
+    data = await state.get_data()
+    user_channels_ids = data.get("user_channels_ids", [])
+
+    user_channels = []
+    channels = await sync_to_async(list)(
+        Channel.objects.filter(id__in=user_channels_ids)
+    )
+    user_channels.extend(channels)
+
+    keyboard = await user_channels_kb(user_channels, page=page)
+
+    await state.update_data(channels_page=page)
+
+    await callback.message.edit_reply_markup(reply_markup=keyboard)
+
+
 @router.callback_query(F.data == "digest_btn")
 async def handle_digest(callback: CallbackQuery, state: FSMContext):
     """Хендлер кнопки 'Дайджест'"""
     callback.answer()
-    digest_caption = await generate_digest_text()
-    # TODO предусмотреть логику, если новостей очень много и не помещаются в одно сообщение
+
+    digest_caption, total_pages = await generate_digest_text_paginated(page=0)
+
+    await state.set_state(DigestStates.viewing_digest)
+    await state.update_data(digest_page=0, digest_total_pages=total_pages)
+
+    keyboard = digest_kb(page=0, total_pages=total_pages)
+
     await send_image_message(
         message=callback.message,
         image_name="digest",
         caption=digest_caption,
-        keyboard=back_to_menu_kb(),
+        keyboard=keyboard,
         edit_message=True,
+        parse_mode=ParseMode.MARKDOWN,
     )
+
+
+@router.callback_query(
+    F.data.startswith("digest_page_"), StateFilter(DigestStates.viewing_digest)
+)
+async def handle_digest_pagination(callback: CallbackQuery, state: FSMContext):
+    """Обработчик пагинации для дайджеста"""
+    try:
+        page = int(callback.data.split("_")[-1])
+
+        digest_caption, total_pages = await generate_digest_text_paginated(
+            page=page
+        )
+
+        await state.update_data(
+            digest_page=page, digest_total_pages=total_pages
+        )
+
+        keyboard = digest_kb(page=page, total_pages=total_pages)
+
+        await callback.message.edit_caption(
+            caption=digest_caption,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Ошибка при обработке пагинации дайджеста: {e}", exc_info=True
+        )
 
 
 @router.callback_query(F.data == "support_btn")
@@ -235,75 +304,6 @@ async def handle_cancel_reccurent_done(
     # TODO какая-то логика отключение подписки
 
 
-@router.message()
-async def handle_channel_links(message: Message, state: FSMContext):
-    """Обработчик ссылок на каналы от пользователя"""
-    user = current_user.get()
-    if message.forward_from_chat:
-        channel_links = handle_forwarded_message(message)
-        if channel_links:
-            can_add, limit_message = await check_channel_limit(
-                user, len(channel_links)
-            )
-            if not can_add:
-                await send_image_message(
-                    message, "limit", limit_message, limit_reached_kb()
-                )
-                return
-
-            await message.answer(
-                f"Найдено каналов для добавления: {len(channel_links)}\n"
-                f"Проверяем доступность и подписываемся..."
-            )
-            await state.update_data(channel_links=channel_links)
-            await process_channel_subscription(message, state, channel_links)
-            await state.clear()
-            return
-        else:
-            await message.answer(
-                "Не удалось извлечь ссылку на канал из пересланного сообщения."
-            )
-            return
-
-    current_state = await state.get_state()
-    if current_state != AddChannelsStates.waiting_for_links:
-        return
-
-    if not message.text:
-        await message.answer(
-            "Отправьте текстовое сообщение со ссылками на каналы или перешлите сообщение из канала."
-        )
-        return
-
-    channel_links = parse_channel_links(message.text)
-    if not channel_links:
-        await message.answer(
-            "Не удалось найти валидные ссылки на каналы.\n\n"
-            "Поддерживаемые форматы:\n"
-            "• t.me/channel_name\n"
-            "• https://t.me/channel_name\n"
-            "• t.me/+private_link"
-        )
-        return
-
-    can_add, limit_message = await check_channel_limit(user, len(channel_links))
-    if not can_add:
-        await send_image_message(
-            message, "limit", limit_message, limit_reached_kb()
-        )
-        return
-
-    await state.update_data(channel_links=channel_links)
-
-    await message.answer(
-        f"Найдено каналов для добавления: {len(channel_links)}\n"
-        f"Проверяем доступность и подписываемся..."
-    )
-    await process_channel_subscription(message, state, channel_links)
-
-    await state.clear()
-
-
 @router.callback_query(F.data.startswith("unsubscribe_"))
 async def handle_unsubscribe_channel(
     callback: CallbackQuery, state: FSMContext
@@ -318,7 +318,34 @@ async def handle_unsubscribe_channel(
         logger.info(
             f"Пользователь {user.tg_user_id} отписался от канала {channel.title}"
         )
-        await handle_my_channels(callback, state)
+        data = await state.get_data()
+        current_page = data.get("channels_page", 0)
+        user_channels_ids = data.get("user_channels_ids", [])
+
+        if channel_id in user_channels_ids:
+            user_channels_ids.remove(channel_id)
+
+        user_channels = []
+        for ch_id in user_channels_ids:
+            try:
+                ch = await Channel.objects.aget(id=ch_id)
+                user_channels.append(ch)
+            except Channel.DoesNotExist:
+                continue
+
+        channels_per_page = 10
+        total_pages = (
+            len(user_channels) + channels_per_page - 1
+        ) // channels_per_page
+        if total_pages > 0 and current_page >= total_pages:
+            current_page = total_pages - 1
+
+        await state.update_data(
+            channels_page=current_page, user_channels_ids=user_channels_ids
+        )
+
+        keyboard = await user_channels_kb(user_channels, page=current_page)
+        await callback.message.edit_reply_markup(reply_markup=keyboard)
 
     except Channel.DoesNotExist:
         logger.error(f"Канал с ID {channel_id} не найден")
@@ -405,12 +432,18 @@ async def process_channel_subscription(
             result = ChannelResult(**result_data)
 
             if result.success and result.telegram_id and result.title:
+                # Определяем, является ли канал приватным
+                is_private = (
+                    not result.username
+                )  # Если нет username, то канал приватный
+
                 channel, created = await Channel.objects.aget_or_create(
                     telegram_id=result.telegram_id,
                     defaults={
                         "title": result.title,
                         "main_username": result.username,
                         "link_subscription": result.link,
+                        "is_private": is_private,
                     },
                 )
 
@@ -418,6 +451,7 @@ async def process_channel_subscription(
                     channel.title = result.title
                     channel.main_username = result.username
                     channel.link_subscription = result.link
+                    channel.is_private = is_private
                     await channel.asave()
 
                 await sync_to_async(user.channels.add)(channel)
@@ -510,3 +544,58 @@ async def cmd_remove(message: Message, state: FSMContext):
     await message.answer(
         text="Клавиатура удалена", reply_markup=ReplyKeyboardRemove()
     )
+
+
+@router.callback_query(F.data == "noop")
+async def handle_noop(callback: CallbackQuery, state: FSMContext):
+    """Обработчик для кнопок, которые не должны ничего делать"""
+    callback.answer()
+
+
+@router.message()
+async def handle_channel_links(message: Message, state: FSMContext):
+    """Обработчик ссылок на каналы от пользователя"""
+    user = current_user.get()
+
+    # Для медиа-групп обрабатываем только сообщения с текстом/подписью
+    if message.media_group_id and not message.text and not message.caption:
+        return  # Пропускаем сообщения без текста в медиа-группе
+
+    if message.forward_from_chat:
+        channel_links = handle_forwarded_message(message)
+        if channel_links:
+            can_add, limit_message = await check_channel_limit(
+                user, len(channel_links)
+            )
+            if not can_add:
+                await send_image_message(
+                    message, "limit", limit_message, limit_reached_kb()
+                )
+                return
+            await state.update_data(channel_links=channel_links)
+            await process_channel_subscription(message, state, channel_links)
+            await state.clear()
+            return
+
+    current_state = await state.get_state()
+    if current_state != AddChannelsStates.waiting_for_links:
+        return
+
+    if not message.text:
+        return
+
+    channel_links = parse_channel_links(message.text)
+    if not channel_links:
+        return
+
+    can_add, limit_message = await check_channel_limit(user, len(channel_links))
+    if not can_add:
+        await send_image_message(
+            message, "limit", limit_message, limit_reached_kb()
+        )
+        return
+
+    await state.update_data(channel_links=channel_links)
+    await process_channel_subscription(message, state, channel_links)
+
+    await state.clear()

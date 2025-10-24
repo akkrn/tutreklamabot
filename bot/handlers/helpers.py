@@ -6,6 +6,7 @@ from pathlib import Path
 
 import structlog
 from aiogram import Bot
+from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
@@ -161,6 +162,7 @@ async def send_image_message(
     above: bool = False,
     bot: Bot | None = None,
     edit_message: bool = False,
+    parse_mode: ParseMode = ParseMode.HTML,
 ) -> Message | None:
     """Отправляет изображение с кешированием через Redis"""
     if not bot:
@@ -179,7 +181,9 @@ async def send_image_message(
             file_id = await get_file_id(redis_key)
 
             if file_id:
-                media = InputMediaPhoto(media=file_id, caption=caption)
+                media = InputMediaPhoto(
+                    media=file_id, caption=caption, parse_mode=parse_mode
+                )
                 result = await bot.edit_message_media(
                     chat_id=message.chat.id,
                     message_id=message.message_id,
@@ -196,6 +200,7 @@ async def send_image_message(
                     caption=caption,
                     above=above,
                     reply_markup=keyboard,
+                    parse_mode=parse_mode,
                 )
                 try:
                     await bot.delete_message(
@@ -214,6 +219,7 @@ async def send_image_message(
                 caption=caption,
                 above=above,
                 reply_markup=keyboard,
+                parse_mode=parse_mode,
             )
 
             try:
@@ -231,6 +237,7 @@ async def send_image_message(
                 caption=caption,
                 above=above,
                 reply_markup=keyboard,
+                parse_mode=parse_mode,
             )
             return result
 
@@ -239,17 +246,14 @@ async def send_image_message(
             return await message.answer(caption, reply_markup=keyboard)
 
 
-# TODO Можно и нужно кешировать результат
-async def generate_digest_text() -> str:
-    """Генерирует текст дайджеста рекламных постов за 24 часа"""
+async def generate_digest_text_paginated(
+    page: int = 0, max_length: int = 1000
+) -> tuple[str, int]:
+    """Генерирует текст дайджеста рекламных постов за 24 часа с пагинацией"""
     user = current_user.get()
-
     yesterday = timezone.now() - timedelta(hours=24)
 
-    digest_text = "Рекламные посты за прошедшие 24 часа:\n\n"
-    max_length = 1000
-    current_length = len(digest_text)
-
+    # Получаем все новости, группированные по каналам
     channels_news = defaultdict(list)
     user_news = (
         ChannelNews.objects.filter(
@@ -262,50 +266,76 @@ async def generate_digest_text() -> str:
     async for news in user_news:
         channels_news[news.channel].append(news)
 
+    all_channel_blocks = []
     for channel, news_list in channels_news.items():
         channel_link = (
             f"https://t.me/{channel.main_username}"
             if channel.main_username
             else channel.link_subscription or None
         )
-        # Безопасно экранируем название канала
         safe_channel_title = channel.title
 
-        channel_block = (
-            f"<a href='{channel_link}'>{safe_channel_title}</a>\n"
+        # Заголовок канала
+        channel_header = (
+            f"[{safe_channel_title}]({channel_link})\n"
             if channel_link
             else f"{safe_channel_title}\n"
         )
 
+        channel_content = ""
         for news in news_list:
-            # Безопасно экранируем и обрезаем текст новости
             truncated = truncate_text(news.message or "")
-            safe_truncated = truncated
-            news_line = f"· {safe_truncated}\n"
+            news_line = f"· {truncated}\n"
             post_link = (
                 f"{channel_link}/{news.message_id}" if channel_link else None
             )
             news_link = (
-                f"<a href='{post_link}'>Перейти к посту →</a>"
-                if post_link
-                else None
+                f"[Перейти к посту →]({post_link})" if post_link else None
             )
-            news_block = (
-                news_line + (news_link or "") + "\n"
-            )  # Добавляем разделитель
+            news_block = news_line + (news_link or "") + "\n"
+            channel_content += news_block
 
-            if (
-                current_length + len(channel_block) + len(news_block) + 1
-                > max_length
-            ):
-                break
+        full_channel_block = channel_header + channel_content
+        all_channel_blocks.append(full_channel_block)
 
-            channel_block += news_block
+    # Добавляем заголовок
+    header = "*Рекламные посты за прошедшие 24 часа:*\n\n"
 
-        if current_length + len(channel_block) + 1 > max_length:
-            break
+    # Разделяем на страницы по max_length
+    pages = []
+    current_page = ""
+    current_length = len(header)
 
-        digest_text += channel_block + "\n"
-        current_length += len(channel_block) + 1
+    for channel_block in all_channel_blocks:
+        channel_block_with_separator = channel_block + "\n"
 
-    return digest_text
+        # Если блок помещается на текущую страницу
+        if current_length + len(channel_block_with_separator) <= max_length:
+            current_page += channel_block_with_separator
+            current_length += len(channel_block_with_separator)
+        else:
+            # Если блок не помещается, сохраняем текущую страницу и начинаем новую
+            if current_page:
+                pages.append((header + current_page).rstrip())
+
+            # Проверяем, помещается ли блок на новую страницу
+            if len(header + channel_block_with_separator) <= max_length:
+                current_page = channel_block_with_separator
+                current_length = len(header + current_page)
+            else:
+                # Блок слишком большой, обрезаем его
+                available_space = max_length - len(header)
+                truncated_block = channel_block_with_separator[:available_space]
+                current_page = truncated_block
+                current_length = len(header + current_page)
+
+    # Добавляем последнюю страницу
+    if current_page:
+        pages.append((header + current_page).rstrip())
+
+    total_pages = len(pages)
+
+    # Циклическая пагинация
+    actual_page = page % total_pages if total_pages > 0 else 0
+
+    return pages[actual_page], total_pages

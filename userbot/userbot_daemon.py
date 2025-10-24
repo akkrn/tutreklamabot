@@ -91,9 +91,15 @@ class UserbotDaemon:
         for link in request.channel_links:
             try:
                 # Определяем тип ссылки и подписываемся
-                if link.startswith("https://t.me/+"):
+                if link.startswith("t.me/+") or link.startswith(
+                    "https://t.me/+"
+                ):
                     # Инвайт-ссылка для приватных каналов/групп
-                    invite_hash = link.replace("https://t.me/+", "")
+                    if link.startswith("https://t.me/+"):
+                        invite_hash = link.replace("https://t.me/+", "")
+                    else:
+                        invite_hash = link.replace("t.me/+", "")
+
                     try:
                         updates = await self.client(
                             ImportChatInviteRequest(invite_hash)
@@ -126,8 +132,7 @@ class UserbotDaemon:
                         results.append(result)
                         continue
 
-                # Подписываемся на канал (если это не инвайт-ссылка)
-                if not link.startswith("https://t.me/+"):
+                    # Подписываемся на канал
                     try:
                         await self.client(JoinChannelRequest(entity))
                     except UserAlreadyParticipantError:

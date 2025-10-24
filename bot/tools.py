@@ -58,6 +58,7 @@ async def send_file(
     caption: str,
     above: bool = False,
     reply_markup: InlineKeyboardMarkup | None = None,
+    parse_mode: ParseMode = ParseMode.HTML,
 ) -> Message:
     """Send files to Telegam servers and collect file_id in Redis cache"""
 
@@ -70,6 +71,7 @@ async def send_file(
                 caption=caption,
                 show_caption_above_media=above,
                 reply_markup=reply_markup,
+                parse_mode=parse_mode,
             )
             return result
         except TelegramAPIError:
@@ -82,6 +84,7 @@ async def send_file(
             caption=caption,
             show_caption_above_media=above,
             reply_markup=reply_markup,
+            parse_mode=parse_mode,
         )
         file_id = result.photo[-1].file_id
         await save_file_id(redis_key, file_id)

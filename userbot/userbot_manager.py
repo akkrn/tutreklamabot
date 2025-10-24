@@ -4,8 +4,12 @@ from typing import Dict, Optional
 import structlog
 from asgiref.sync import sync_to_async
 from telethon import TelegramClient, events
-from telethon.errors import AuthKeyUnregisteredError, SessionRevokedError
+from telethon.errors import (
+    AuthKeyUnregisteredError,
+    SessionRevokedError,
+)
 from telethon.tl.functions.channels import JoinChannelRequest
+from telethon.tl.functions.messages import ImportChatInviteRequest
 
 from bot.models import ChannelNews, UserBot
 from core.event_manager import EventType, event_manager
@@ -332,34 +336,42 @@ class UserbotManager:
             results = []
             for channel_link in request.channel_links:
                 try:
-                    # Для приватных каналов используем JoinChannelRequest напрямую
+                    # Для приватных каналов используем ImportChatInviteRequest
                     if channel_link.startswith(
                         "https://t.me/+"
                     ) or channel_link.startswith("t.me/+"):
                         # Это приватная ссылка-приглашение
-                        await client(JoinChannelRequest(channel_link))
+                        if channel_link.startswith("https://t.me/+"):
+                            invite_hash = channel_link.replace(
+                                "https://t.me/+", ""
+                            )
+                        else:
+                            invite_hash = channel_link.replace("t.me/+", "")
 
-                        # После успешной подписки получаем информацию о канале
                         try:
-                            entity = await client.get_entity(channel_link)
-                            result = {
-                                "link": channel_link,
-                                "success": True,
-                                "telegram_id": entity.id,
-                                "title": getattr(entity, "title", ""),
-                                "username": getattr(entity, "username", ""),
-                                "error_message": None,
-                            }
-                        except Exception:
-                            # Если не удалось получить entity, но подписка прошла успешно
-                            result = {
-                                "link": channel_link,
-                                "success": True,
-                                "telegram_id": None,
-                                "title": "Приватный канал",
-                                "username": None,
-                                "error_message": None,
-                            }
+                            updates = await client(
+                                ImportChatInviteRequest(invite_hash)
+                            )
+                            # Получаем информацию о канале после успешной подписки
+                            if hasattr(updates, "chats") and updates.chats:
+                                entity = updates.chats[0]
+                            else:
+                                raise Exception(
+                                    "Не удалось получить информацию о канале после подписки"
+                                )
+                        except Exception as e:
+                            raise Exception(
+                                f"Ошибка подписки по инвайт-ссылке: {str(e)}"
+                            )
+
+                        result = {
+                            "link": channel_link,
+                            "success": True,
+                            "telegram_id": abs(entity.id),
+                            "title": entity.title,
+                            "username": getattr(entity, "username", None),
+                            "error_message": None,
+                        }
                     else:
                         # Для публичных каналов сначала получаем entity
                         entity = await client.get_entity(channel_link)
@@ -379,7 +391,7 @@ class UserbotManager:
 
                 except Exception as e:
                     logger.error(
-                        f"Ошибка подписки на канал {channel_link}: {e}"
+                        f"1Ошибка подписки на канал {channel_link}: {e}"
                     )
 
                     # Создаем результат с ошибкой

@@ -78,11 +78,26 @@ def limit_reached_kb() -> InlineKeyboardMarkup:
     return create_inline_kb("change_tariff_btn", "main_menu_btn", width=1)
 
 
-async def user_channels_kb(user_channels: list) -> InlineKeyboardMarkup:
-    """Клавиатура с каналами пользователя и кнопкой отписки"""
+async def user_channels_kb(
+    user_channels: list, page: int = 0, channels_per_page: int = 10
+) -> InlineKeyboardMarkup:
+    """Клавиатура с каналами пользователя и кнопкой отписки с циклической пагинацией"""
     kb_builder = InlineKeyboardBuilder()
+
+    # Циклическая пагинация
+    total_pages = (
+        len(user_channels) + channels_per_page - 1
+    ) // channels_per_page
+    if total_pages > 0:
+        actual_page = page % total_pages
+        start_idx = actual_page * channels_per_page
+        end_idx = start_idx + channels_per_page
+        page_channels = user_channels[start_idx:end_idx]
+    else:
+        page_channels = []
+
     buttons = []
-    for channel in user_channels:
+    for channel in page_channels:
         button_text = f"❌ {channel.title}"
         callback_data = f"unsubscribe_{channel.id}"
         buttons.append(
@@ -93,6 +108,75 @@ async def user_channels_kb(user_channels: list) -> InlineKeyboardMarkup:
     for i in range(0, len(buttons), width):
         row = buttons[i : i + width]
         kb_builder.row(*row)
+
+    # Добавляем кнопки пагинации если нужно
+    if total_pages > 1:
+        pagination_buttons = []
+
+        # Кнопка "Назад" - всегда видна (циклическая)
+        prev_page = (page - 1) % total_pages
+        pagination_buttons.append(
+            InlineKeyboardButton(
+                text="◀️", callback_data=f"channels_page_{prev_page}"
+            )
+        )
+
+        # Информация о странице
+        pagination_buttons.append(
+            InlineKeyboardButton(
+                text=f"{page+1}/{total_pages}", callback_data="noop"
+            )
+        )
+
+        # Кнопка "Вперед" - всегда видна (циклическая)
+        next_page = (page + 1) % total_pages
+        pagination_buttons.append(
+            InlineKeyboardButton(
+                text="▶️", callback_data=f"channels_page_{next_page}"
+            )
+        )
+
+        kb_builder.row(*pagination_buttons)
+
+    main_menu_text = get_translation("main_menu_btn")
+    kb_builder.row(
+        InlineKeyboardButton(text=main_menu_text, callback_data="main_menu_btn")
+    )
+
+    return kb_builder.as_markup()
+
+
+def digest_kb(page: int = 0, total_pages: int = 1) -> InlineKeyboardMarkup:
+    """Клавиатура для дайджеста с циклической пагинацией"""
+    kb_builder = InlineKeyboardBuilder()
+
+    if total_pages > 1:
+        pagination_buttons = []
+
+        # Кнопка "Назад" - всегда видна (циклическая)
+        prev_page = (page - 1) % total_pages
+        pagination_buttons.append(
+            InlineKeyboardButton(
+                text="◀️", callback_data=f"digest_page_{prev_page}"
+            )
+        )
+
+        # Информация о странице
+        pagination_buttons.append(
+            InlineKeyboardButton(
+                text=f"{page+1}/{total_pages}", callback_data="noop"
+            )
+        )
+
+        # Кнопка "Вперед" - всегда видна (циклическая)
+        next_page = (page + 1) % total_pages
+        pagination_buttons.append(
+            InlineKeyboardButton(
+                text="▶️", callback_data=f"digest_page_{next_page}"
+            )
+        )
+
+        kb_builder.row(*pagination_buttons)
 
     main_menu_text = get_translation("main_menu_btn")
     kb_builder.row(
