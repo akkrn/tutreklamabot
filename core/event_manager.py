@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Optional
 
 import structlog
 
@@ -36,8 +36,8 @@ class EventManager:
     """Единый менеджер событий для всего приложения"""
 
     _instance: Optional["EventManager"] = None
-    _handlers: Dict[str, List[EventHandler]] = {}
-    _running_tasks: List[asyncio.Task] = []
+    _handlers: dict[str, list[EventHandler]] = {}
+    _running_tasks: list[asyncio.Task] = []
 
     def __new__(cls):
         if cls._instance is None:
@@ -79,7 +79,7 @@ class EventManager:
         await redis_manager.disconnect()
         logger.info("Остановлено прослушивание всех каналов")
 
-    async def _listen_channel(self, channel: str, handlers: List[EventHandler]):
+    async def _listen_channel(self, channel: str, handlers: list[EventHandler]):
         """Прослушивает конкретный канал"""
         try:
             await redis_manager.subscribe_to_channel(

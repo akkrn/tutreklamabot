@@ -1,5 +1,5 @@
 from contextvars import ContextVar
-from typing import Any, Awaitable, Callable, Dict
+from typing import Any, Awaitable, Callable
 
 import structlog
 from aiogram import BaseMiddleware
@@ -16,9 +16,9 @@ current_user: ContextVar[User] = ContextVar("current_user")
 class CurrentUserMiddleware(BaseMiddleware):
     async def __call__(
         self,
-        handler: Callable[[Update, Dict[str, Any]], Awaitable[Any]],
+        handler: Callable[[Update, dict[str, Any]], Awaitable[Any]],
         event: Update,
-        data: Dict[str, Any],
+        data: dict[str, Any],
     ) -> Any:
         if event.message:
             tg_user = event.message.from_user
@@ -63,9 +63,9 @@ class CurrentUserMiddleware(BaseMiddleware):
 class IgnoreMessageNotModifiedMiddleware:  # При нажатии на кнопку, которая не меняет текст сообщения, игнорируем ошибку, чтобы не засорять логи
     async def __call__(
         self,
-        handler: Callable[[TelegramObject, Dict[str, Any]], Any],
+        handler: Callable[[TelegramObject, dict[str, Any]], Any],
         event: TelegramObject,
-        data: Dict[str, Any],
+        data: dict[str, Any],
     ) -> Any:
         try:
             return await handler(event, data)

@@ -1,8 +1,7 @@
 import re
-from typing import List
 
 
-def parse_channel_links(text: str) -> List[str]:
+def parse_channel_links(text: str) -> list[str]:
     """Парсит текст и извлекает только валидные ссылки на Telegram каналы"""
     patterns = [
         r"t\.me/[a-zA-Z0-9_]+",  # t.me/channel
@@ -62,7 +61,7 @@ def extract_forwarded_channel_link(message) -> str | None:
     return None
 
 
-def handle_forwarded_message(message) -> List[str]:
+def handle_forwarded_message(message) -> list[str]:
     """Обрабатывает пересланное сообщение и возвращает ссылки на каналы"""
     forwarded_link = extract_forwarded_channel_link(message)
     if forwarded_link:

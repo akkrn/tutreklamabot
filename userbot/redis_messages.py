@@ -1,7 +1,7 @@
 import json
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 import structlog
 
@@ -33,7 +33,7 @@ class SubscribeChannelsMessage:
     message_type: str = MessageType.SUBSCRIBE_CHANNELS.value
     request_id: str = ""
     user_id: int = 0
-    channel_links: List[str] = None
+    channel_links: list[str] = None
 
     def __post_init__(self):
         if self.channel_links is None:
@@ -60,7 +60,7 @@ class SubscribeResponseMessage:
     request_id: str = ""
     user_id: int = 0
     userbot_id: int = 0
-    results: List[dict] = None  # List[ChannelResult as dict]
+    results: list[dict] = None  # list[ChannelResult as dict]
     success: bool = True
     error_message: Optional[str] = None
 
