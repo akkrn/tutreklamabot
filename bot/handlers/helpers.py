@@ -1,5 +1,4 @@
 import base64
-from collections import defaultdict
 from datetime import timedelta
 from html import escape
 from pathlib import Path
@@ -24,7 +23,7 @@ from bot.keyboards import menu_kb
 from bot.middlewares import current_user
 from bot.models import ChannelNews
 from bot.redis_client import get_file_id
-from bot.tools import send_file, truncate_text
+from bot.tools import clean_markdown, send_file, truncate_text
 from bot.translations import get_translation
 
 logger = structlog.getLogger(__name__)
@@ -80,7 +79,7 @@ async def get_menu(
         caption = get_translation(new_msg_text_key)
     else:
         caption = (
-            f"Пользователь: {user_link_formatted}\n\n"
+            f"<b>Пользователь:</b> {user_link_formatted}\n\n"
             f"Тариф: {tariff_name}\n"
             f"Каналов добавлено: {channels_count}/{channels_limit}\n\n"
             f"{ref_text}"
@@ -253,8 +252,7 @@ async def generate_digest_text_paginated(
     user = current_user.get()
     yesterday = timezone.now() - timedelta(hours=24)
 
-    # Получаем все новости, группированные по каналам
-    channels_news = defaultdict(list)
+    # Получаем все новости за последние 24 часа
     user_news = (
         ChannelNews.objects.filter(
             channel__users=user, created_at__gte=yesterday
@@ -263,66 +261,58 @@ async def generate_digest_text_paginated(
         .order_by("-created_at")
     )
 
+    all_news_blocks = []
     async for news in user_news:
-        channels_news[news.channel].append(news)
-
-    all_channel_blocks = []
-    for channel, news_list in channels_news.items():
+        channel = news.channel
         channel_link = (
             f"https://t.me/{channel.main_username}"
             if channel.main_username
-            else channel.link_subscription or None
+            else "https://t.me/c/{channel.telegram_id}"
         )
-        safe_channel_title = channel.title
 
-        # Заголовок канала
+        # Формируем HTML разметку для каждой новости
         channel_header = (
-            f"[{safe_channel_title}]({channel_link})\n"
-            if channel_link
-            else f"{safe_channel_title}\n"
+            f'<a href="{channel_link}"><b>{channel.title}</b></a>:\n'
         )
 
-        channel_content = ""
-        for news in news_list:
-            truncated = truncate_text(news.message or "")
-            news_line = f"· {truncated}\n"
-            post_link = (
-                f"{channel_link}/{news.message_id}" if channel_link else None
-            )
-            news_link = (
-                f"[Перейти к посту →]({post_link})" if post_link else None
-            )
-            news_block = news_line + (news_link or "") + "\n"
-            channel_content += news_block
+        truncated = truncate_text(clean_markdown(news.message) or "")
+        news_content = f" · {truncated}\n"
 
-        full_channel_block = channel_header + channel_content
-        all_channel_blocks.append(full_channel_block)
+        post_link = (
+            f"{channel_link}/{news.message_id}"
+            if channel.main_username
+            else f"{channel_link}/{news.message_id}"
+        )
+        news_link = f'<a href="{post_link}">Перейти к посту →</a>'
+
+        news_block = channel_header + news_content + news_link + "\n"
+        all_news_blocks.append(news_block)
 
     # Разделяем на страницы по max_length
     pages = []
     current_page = ""
     current_length = 0
 
-    for channel_block in all_channel_blocks:
-        channel_block_with_separator = channel_block + "\n"
+    for news_block in all_news_blocks:
+        news_block_with_separator = news_block + "\n"
 
         # Если блок помещается на текущую страницу
-        if current_length + len(channel_block_with_separator) <= max_length:
-            current_page += channel_block_with_separator
-            current_length += len(channel_block_with_separator)
+        if current_length + len(news_block_with_separator) <= max_length:
+            current_page += news_block_with_separator
+            current_length += len(news_block_with_separator)
         else:
             # Если блок не помещается, сохраняем текущую страницу и начинаем новую
             if current_page:
                 pages.append((current_page).rstrip())
 
             # Проверяем, помещается ли блок на новую страницу
-            if len(channel_block_with_separator) <= max_length:
-                current_page = channel_block_with_separator
+            if len(news_block_with_separator) <= max_length:
+                current_page = news_block_with_separator
                 current_length = len(current_page)
             else:
                 # Блок слишком большой, обрезаем его
                 available_space = max_length
-                truncated_block = channel_block_with_separator[:available_space]
+                truncated_block = news_block_with_separator[:available_space]
                 current_page = truncated_block
                 current_length = len(current_page)
 
@@ -331,7 +321,7 @@ async def generate_digest_text_paginated(
         pages.append((current_page).rstrip())
 
     if not pages:
-        return "❤️ *Новых постов ещё не было*. Возвращайтесь позже.", 0
+        return "❤️ <b>Новых постов ещё не было</b>. Возвращайтесь позже.", 0
 
     total_pages = len(pages)
 

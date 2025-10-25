@@ -6,7 +6,7 @@ from django.conf import settings
 
 from bot.keyboards import new_menu_kb
 from bot.models import Channel
-from bot.tools import send_long, truncate_text
+from bot.tools import clean_markdown, send_long, truncate_text
 from userbot.redis_messages import NewAdMessage, deserialize_message
 
 logger = structlog.getLogger(__name__)
@@ -86,29 +86,29 @@ class AdNotificationHandler:
                 logger.info(f"Нет подписчиков на канал {channel.title}")
                 return
 
-            channel_link = (
-                ad_message.channel_link
-                or f"https://t.me/{channel.main_username}"
-            )
-
             # Безопасно экранируем текст сообщения
-            safe_message_text = truncate_text(ad_message.message_text)
+            safe_message_text = truncate_text(
+                clean_markdown(ad_message.message_text)
+            )
             safe_channel_title = ad_message.channel_title
 
             # Определяем тип канала и формируем соответствующее сообщение
             if channel.is_private:
-                channel_type_text = "Реклама из закрытого канала"
-                button_text = "Перейти в канал"
-                # Для закрытого канала ссылка ведет на канал
-                action_link = channel_link
+                channel_link = f"https://t.me/c/{channel.telegram_id}"
+                channel_type_text = "Реклама в канале"
+                button_text = "Перейти к посту"
+                action_link = f"{channel_link}/{ad_message.message_id}"
             else:
-                channel_type_text = "Реклама из открытого канала"
+                channel_link = f"https://t.me/{channel.main_username}"
+                channel_type_text = "Реклама в канале"
                 button_text = "Перейти к посту"
                 action_link = f"{channel_link}/{ad_message.message_id}"
 
-            message_text = f"{channel_type_text}: [{safe_channel_title}]({channel_link})\n\n"
+            message_text = f"{channel_type_text}: <a href='{channel_link}'><b>{safe_channel_title}</b></a>\n\n"
             message_text += f"{safe_message_text}\n\n"
-            message_text += f"[{button_text} →]({action_link})"
+            message_text += (
+                f"<a href='{action_link}'><b>{button_text} →</b></a>"
+            )
 
             sent_count = 0
             failed_count = 0

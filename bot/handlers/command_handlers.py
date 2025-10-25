@@ -4,7 +4,6 @@ from datetime import timedelta
 
 import structlog
 from aiogram import F, Router
-from aiogram.enums import ParseMode
 from aiogram.filters import CommandObject, CommandStart, StateFilter
 from aiogram.filters.command import Command
 from aiogram.fsm.context import FSMContext
@@ -190,7 +189,6 @@ async def handle_digest(callback: CallbackQuery, state: FSMContext):
         caption=digest_caption,
         keyboard=keyboard,
         edit_message=True,
-        parse_mode=ParseMode.MARKDOWN,
     )
 
 
@@ -215,7 +213,6 @@ async def handle_digest_pagination(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_caption(
             caption=digest_caption,
             reply_markup=keyboard,
-            parse_mode=ParseMode.MARKDOWN,
         )
 
     except Exception as e:
