@@ -73,12 +73,6 @@ def process_payment(
 @require_http_methods(["POST"])
 def robokassa_result(request):
     """Webhook для обработки уведомлений от Robokassa (ResultURL)."""
-    logger.info(
-        "Получен ResultURL от Robokassa",
-        request=request,
-        all_params=dict(request.POST),
-    )
-
     client_ip = request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[
         0
     ] or request.META.get("REMOTE_ADDR", "")
@@ -91,12 +85,13 @@ def robokassa_result(request):
         )
         return HttpResponseBadRequest("IP not allowed")
 
-    inv_id = request.POST.get("InvoiceID", "")
+    inv_id = request.POST.get("InvId", "")
     out_sum = request.POST.get("OutSum", "")
     signature = request.POST.get("SignatureValue", "")
     shp_user_id = request.POST.get("shp_user_id", "")
     shp_tariff_id = request.POST.get("shp_tariff_id", "")
 
+    # TODO собирать email = request.POST.get("EMail", "")
     if not all([inv_id, out_sum, signature]):
         logger.error(
             "Отсутствуют обязательные параметры",
