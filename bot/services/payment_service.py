@@ -71,7 +71,7 @@ def check_signature_result(
         return False
 
 
-async def process_payment_result(
+def process_payment_result(
     inv_id: str, out_sum: str, signature: str, **kwargs
 ) -> tuple[bool, str]:
     """Обработка результата платежа от Robokassa.
@@ -100,16 +100,9 @@ async def process_payment_result(
     tariff_id = kwargs.get("shp_tariff_id")
 
     if not user_id or not tariff_id:
-
-        def get_subscription():
-            try:
-                return UserSubscription.objects.get(
-                    robokassa_invoice_id=inv_id_int
-                )
-            except UserSubscription.DoesNotExist:
-                return None
-
-        subscription = await sync_to_async(get_subscription)()
+        subscription = UserSubscription.objects.filter(
+            robokassa_invoice_id=inv_id_int
+        ).first()
 
         if not subscription:
             logger.error(
@@ -118,7 +111,6 @@ async def process_payment_result(
             )
             return False, "subscription not found"
 
-        # Проверяем, что подписка еще не была оплачена
         if subscription.status == UserSubscription.STATUS_ACTIVE:
             logger.info(
                 "Подписка уже была обработана",
@@ -126,16 +118,12 @@ async def process_payment_result(
             )
             return True, f"OK{inv_id}"
 
-        # Активируем подписку
-        def activate_subscription():
-            subscription.status = UserSubscription.STATUS_ACTIVE
-            subscription.started_at = timezone.now()
-            subscription.expires_at = timezone.now() + timedelta(
-                days=subscription.tariff.duration_days
-            )
-            subscription.save()
-
-        await sync_to_async(activate_subscription)()
+        subscription.status = UserSubscription.STATUS_ACTIVE
+        subscription.started_at = timezone.now()
+        subscription.expires_at = timezone.now() + timedelta(
+            days=subscription.tariff.duration_days
+        )
+        subscription.save()
 
         logger.info(
             "Подписка активирована",
@@ -147,33 +135,18 @@ async def process_payment_result(
 
         return True, f"OK{inv_id}"
 
-    def get_user():
-        return User.objects.get(tg_user_id=user_id)
+    user = User.objects.get(tg_user_id=user_id)
+    tariff = Tariff.objects.get(id=tariff_id)
 
-    def get_tariff():
-        return Tariff.objects.get(id=tariff_id)
-
-    user = await sync_to_async(get_user)()
-    tariff = await sync_to_async(get_tariff)()
-
-    def get_active_subscription():
-        return UserSubscription.objects.filter(
-            user=user, tariff=tariff, status=UserSubscription.STATUS_ACTIVE
-        ).first()
-
-    active_subscription = await sync_to_async(get_active_subscription)()
+    active_subscription = UserSubscription.objects.filter(
+        user=user, tariff=tariff, status=UserSubscription.STATUS_ACTIVE
+    ).first()
 
     if active_subscription:
-        # Продлеваем существующую подписку
-        def extend_subscription():
-            active_subscription.expires_at += timedelta(
-                days=tariff.duration_days
-            )
-            active_subscription.status = UserSubscription.STATUS_ACTIVE
-            active_subscription.is_recurring_enabled = True
-            active_subscription.save()
-
-        await sync_to_async(extend_subscription)()
+        active_subscription.expires_at += timedelta(days=tariff.duration_days)
+        active_subscription.status = UserSubscription.STATUS_ACTIVE
+        active_subscription.is_recurring_enabled = True
+        active_subscription.save()
 
         logger.info(
             "Подписка продлена",
@@ -184,19 +157,14 @@ async def process_payment_result(
 
         return True, f"OK{inv_id}"
     else:
-        # Создаем новую подписку
-        def create_subscription():
-            return UserSubscription.objects.create(
-                user=user,
-                tariff=tariff,
-                status=UserSubscription.STATUS_ACTIVE,
-                expires_at=timezone.now()
-                + timedelta(days=tariff.duration_days),
-                robokassa_invoice_id=inv_id_int,
-                is_recurring_enabled=True,
-            )
-
-        subscription = await sync_to_async(create_subscription)()
+        subscription = UserSubscription.objects.create(
+            user=user,
+            tariff=tariff,
+            status=UserSubscription.STATUS_ACTIVE,
+            expires_at=timezone.now() + timedelta(days=tariff.duration_days),
+            robokassa_invoice_id=inv_id_int,
+            is_recurring_enabled=True,
+        )
 
         logger.info(
             "Создана новая подписка",
