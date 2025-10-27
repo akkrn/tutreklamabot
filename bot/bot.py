@@ -13,6 +13,7 @@ from bot.ad_notification_handler import AdNotificationHandler
 from bot.handlers import (
     command_handlers,
     other_handlers,
+    payment_handlers,
     status_handlers,
 )
 from bot.middlewares import (
@@ -88,6 +89,7 @@ async def build_bot() -> tuple[Bot, Dispatcher]:
     dp = Dispatcher(storage=storage)
 
     dp.include_router(command_handlers.router)
+    dp.include_router(payment_handlers.router)
     dp.include_router(status_handlers.router)
 
     # Всегда последний, так как там пустой приемщик

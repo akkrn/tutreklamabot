@@ -1,11 +1,11 @@
-from urllib.parse import urlencode
-
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from asgiref.sync import sync_to_async
 from django.conf import settings
 
+from bot.middlewares import current_user
 from bot.models import Tariff
+from bot.services.payment_service import generate_payment_url_direct
 from bot.translations import get_translation
 
 MENU_BUTTONS: list[str] = [
@@ -76,6 +76,15 @@ def new_menu_kb() -> InlineKeyboardMarkup:
 def limit_reached_kb() -> InlineKeyboardMarkup:
     """Клавиатура для сообщения о достижении лимита каналов"""
     return create_inline_kb("change_tariff_btn", "main_menu_btn", width=1)
+
+
+def payment_kb() -> InlineKeyboardMarkup:
+    """Клавиатура для сообщения о платеже"""
+    bt1_text = get_translation("pay")
+    bt2_text = get_translation("main_menu_btn")
+    return create_inline_kb(
+        change_tariff_btn=bt1_text, main_menu_btn=bt2_text, width=1
+    )
 
 
 async def user_channels_kb(
@@ -225,25 +234,14 @@ async def tariff_kb() -> InlineKeyboardMarkup:
 
     active_tariffs = await sync_to_async(get_tariff)()
 
+    # Получаем текущего пользователя
+    user = current_user.get()
+
     for tariff in active_tariffs:
         # Текст кнопки: Название тарифа — Цена
         button_text = f"{tariff.get_price_display()} — {tariff.channels_limit} Каналов ({tariff.duration_days} дней)"
 
-        # Формируем ссылку провайдера (Robokassa) для открытия внутри Telegram
-        # Минимально необходимые параметры; при необходимости замените на свои
-        params = {
-            "MerchantLogin": getattr(
-                settings, "ROBOKASSA_MERCHANT_LOGIN", "demo"
-            ),
-            "OutSum": getattr(tariff, "price_rubles", None)
-            or (tariff.price / 100),
-            "InvoiceID": f"tg_tariff_{tariff.id}",
-            "Description": f"Оплата тарифа {tariff.name}",
-            "Culture": "ru",
-        }
-        provider_url = (
-            "https://auth.robokassa.ru/Merchant/Index.aspx?" + urlencode(params)
-        )
+        provider_url = generate_payment_url_direct(user, tariff)
 
         kb_builder.row(
             InlineKeyboardButton(

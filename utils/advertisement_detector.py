@@ -6,7 +6,6 @@ logger = structlog.getLogger(__name__)
 def is_advertisement(text: str) -> bool:
     """Определяет является ли текст рекламным."""
     if not text:
-        logger.debug("📝 Сообщение без текста, не реклама")
         return False
 
     text_lower = text.lower()

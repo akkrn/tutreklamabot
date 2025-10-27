@@ -362,10 +362,12 @@ class UserSubscription(models.Model):
     STATUS_ACTIVE = "active"
     STATUS_EXPIRED = "expired"
     STATUS_CANCELLED = "cancelled"
+    STATUS_UNPAID = "unpaid"
     STATUS_CHOICES = [
         (STATUS_ACTIVE, "Активна"),
         (STATUS_EXPIRED, "Истекла"),
         (STATUS_CANCELLED, "Отменена"),
+        (STATUS_UNPAID, "Неоплачена"),
     ]
 
     user = models.ForeignKey(
@@ -390,11 +392,24 @@ class UserSubscription(models.Model):
         verbose_name="Дата начала подписки", auto_now_add=True
     )
     expires_at = models.DateTimeField(verbose_name="Дата окончания подписки")
-    payment_id = models.CharField(
-        max_length=255,
+    robokassa_invoice_id = models.PositiveIntegerField(
+        unique=True,
+        verbose_name="ID инвойса Robokassa",
+        help_text="Уникальный идентификатор инвойса в системе Robokassa (1-2147483647)",
+    )
+    previous_subscription = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        verbose_name="ID платежа",
-        help_text="Идентификатор платежа в платежной системе",
+        related_name="recurring_subscriptions",
+        verbose_name="Предыдущая подписка",
+        help_text="Ссылка на предыдущую подписку для рекуррентных платежей",
+    )
+    is_recurring_enabled = models.BooleanField(
+        default=True,
+        verbose_name="Автопродление включено",
+        help_text="Включена ли автоплатеж для данной подписки",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -415,6 +430,8 @@ class UserSubscription(models.Model):
     @property
     def is_active(self):
         """Активна ли подписка"""
+        if not self.expires_at:
+            return False
         return (
             self.status == self.STATUS_ACTIVE
             and self.expires_at > timezone.now()
@@ -423,6 +440,8 @@ class UserSubscription(models.Model):
     @property
     def days_remaining(self):
         """Сколько дней осталось до окончания"""
+        if not self.expires_at:
+            return 0
         if self.expires_at <= timezone.now():
             return 0
         return (self.expires_at - timezone.now()).days
@@ -434,152 +453,3 @@ class UserSubscription(models.Model):
                 days=self.tariff.duration_days
             )
         super().save(*args, **kwargs)
-
-
-class Payment(models.Model):
-    """Модель для хранения информации о платежах"""
-
-    STATUS_PENDING = "pending"
-    STATUS_SUCCESS = "success"
-    STATUS_FAILED = "failed"
-    STATUS_CANCELLED = "cancelled"
-    STATUS_REFUNDED = "refunded"
-    STATUS_CHOICES = [
-        (STATUS_PENDING, "Ожидает оплаты"),
-        (STATUS_SUCCESS, "Успешно оплачен"),
-        (STATUS_FAILED, "Ошибка оплаты"),
-        (STATUS_CANCELLED, "Отменен"),
-        (STATUS_REFUNDED, "Возвращен"),
-    ]
-
-    PAYMENT_TYPE_INITIAL = "initial"
-    PAYMENT_TYPE_RECURRENT = "recurrent"
-    PAYMENT_TYPE_CHOICES = [
-        (PAYMENT_TYPE_INITIAL, "Первоначальный платеж"),
-        (PAYMENT_TYPE_RECURRENT, "Рекурентный платеж"),
-    ]
-
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="payments",
-        verbose_name="Пользователь",
-    )
-    tariff = models.ForeignKey(
-        Tariff,
-        on_delete=models.CASCADE,
-        related_name="payments",
-        verbose_name="Тариф",
-    )
-    subscription = models.ForeignKey(
-        UserSubscription,
-        on_delete=models.CASCADE,
-        related_name="payments",
-        verbose_name="Подписка",
-        null=True,
-        blank=True,
-    )
-
-    robokassa_invoice_id = models.CharField(
-        max_length=255,
-        unique=True,
-        verbose_name="ID инвойса Robokassa",
-        help_text="Уникальный идентификатор инвойса в системе Robokassa",
-    )
-    robokassa_payment_id = models.CharField(
-        max_length=255,
-        blank=True,
-        verbose_name="ID платежа Robokassa",
-        help_text="Идентификатор платежа в Robokassa",
-    )
-    robokassa_recurring_id = models.CharField(
-        max_length=255,
-        blank=True,
-        verbose_name="ID рекурентного платежа",
-        help_text="Идентификатор рекурентного платежа в Robokassa",
-    )
-    previous_payment = models.ForeignKey(
-        "self",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="recurring_payments",
-        verbose_name="Предыдущий платеж",
-        help_text="Ссылка на предыдущий платеж для рекурентных платежей",
-    )
-
-    amount = models.PositiveIntegerField(
-        verbose_name="Сумма в рублях", help_text="Сумма платежа в рублях"
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default=STATUS_PENDING,
-        verbose_name="Статус платежа",
-    )
-    payment_type = models.CharField(
-        max_length=20,
-        choices=PAYMENT_TYPE_CHOICES,
-        default=PAYMENT_TYPE_INITIAL,
-        verbose_name="Тип платежа",
-    )
-    payment_url = models.URLField(
-        blank=True,
-        verbose_name="URL для оплаты",
-        help_text="Ссылка для перехода к оплате",
-    )
-    payment_data = models.JSONField(
-        default=dict,
-        blank=True,
-        verbose_name="Данные платежа",
-        help_text="Дополнительные данные платежа в JSON формате",
-    )
-    created_at = models.DateTimeField(
-        verbose_name="Дата создания", auto_now_add=True
-    )
-    updated_at = models.DateTimeField(
-        verbose_name="Дата обновления", auto_now=True
-    )
-    paid_at = models.DateTimeField(
-        verbose_name="Дата оплаты", null=True, blank=True
-    )
-
-    class Meta:
-        verbose_name = "Платеж"
-        verbose_name_plural = "Платежи"
-        ordering = ["-created_at"]
-
-    def __str__(self):
-        return f"{self.user} - {self.tariff.name} ({self.get_status_display()})"
-
-    @property
-    def amount_rubles(self):
-        """Сумма в рублях"""
-        return self.amount // 100
-
-    def get_amount_display(self):
-        """Возвращает сумму в рублях с валютой"""
-        return f"{self.amount_rubles} ₽"
-
-    def mark_as_success(self, robokassa_payment_id=None):
-        """Отмечает платеж как успешный"""
-        self.status = self.STATUS_SUCCESS
-        self.paid_at = timezone.now()
-        if robokassa_payment_id:
-            self.robokassa_payment_id = robokassa_payment_id
-        self.save()
-
-    def mark_as_failed(self):
-        """Отмечает платеж как неуспешный"""
-        self.status = self.STATUS_FAILED
-        self.save()
-
-    def mark_as_cancelled(self):
-        """Отмечает платеж как отмененный"""
-        self.status = self.STATUS_CANCELLED
-        self.save()
-
-    def mark_as_refunded(self):
-        """Отмечает платеж как возвращенный"""
-        self.status = self.STATUS_REFUNDED
-        self.save()

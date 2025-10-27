@@ -11,4 +11,5 @@ DEFAULT_TEXTS = {
     "new_main_menu_btn": "Главное меню",
     "cancel_reccurent_btn": "Отключить автоплатеж",
     "cancel_reccurent_done_btn": "Отключить автоплатеж",
+    "pay": "Оплатить",
 }

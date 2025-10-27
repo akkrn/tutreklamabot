@@ -31,6 +31,7 @@ from bot.keyboards import (
 )
 from bot.middlewares import current_user
 from bot.models import Channel, ChannelSubscription, User
+from bot.services.payment_service import cancel_recurring
 from bot.states import AddChannelsStates, ChannelsStates, DigestStates
 from bot.utils.link_parser import handle_forwarded_message, parse_channel_links
 from core.event_manager import EventType, event_manager
@@ -287,6 +288,8 @@ async def handle_cancel_reccurent_done(
     callback: CallbackQuery, state: FSMContext
 ):
     """Хендлер кнопки 'Отключить автоплатеж' и подтверждения"""
+    user = current_user.get()
+    await cancel_recurring(user)
     cancel_reccurent_text = (
         "Автоплатеж отключен. Спасибо за использование нашего сервиса!"
     )
@@ -298,7 +301,6 @@ async def handle_cancel_reccurent_done(
         keyboard=new_menu_kb(),
         edit_message=True,
     )
-    # TODO какая-то логика отключение подписки
 
 
 @router.callback_query(F.data.startswith("unsubscribe_"))

@@ -13,7 +13,6 @@ from bot.models import (
     ChannelNews,
     ChannelSubscription,
     ChannelUser,
-    Payment,
     Tariff,
     TextTemplate,
     User,
@@ -35,7 +34,6 @@ class UserSubscriptionInline(admin.TabularInline):
         "status",
         "started_at",
         "expires_at",
-        "payment_id",
     ]
 
 
@@ -604,13 +602,20 @@ class UserSubscriptionAdmin(admin.ModelAdmin):
         "expires_at",
         "days_remaining",
         "is_active",
+        "is_recurring_enabled",
     ]
-    list_filter = ["status", "tariff", "started_at", "expires_at"]
+    list_filter = [
+        "status",
+        "tariff",
+        "started_at",
+        "expires_at",
+        "is_recurring_enabled",
+    ]
     search_fields = [
         "user__first_name",
         "user__username",
         "tariff__name",
-        "payment_id",
+        "robokassa_invoice_id",
     ]
     readonly_fields = [
         "started_at",
@@ -631,8 +636,15 @@ class UserSubscriptionAdmin(admin.ModelAdmin):
             {"fields": ("started_at", "expires_at", "days_remaining")},
         ),
         (
-            "Платеж",
-            {"fields": ("payment_id",)},
+            "Robokassa",
+            {
+                "fields": (
+                    "robokassa_invoice_id",
+                    "previous_subscription",
+                    "is_recurring_enabled",
+                ),
+                "classes": ("collapse",),
+            },
         ),
         (
             "Статус",
@@ -656,85 +668,3 @@ class UserSubscriptionAdmin(admin.ModelAdmin):
 
     is_active.short_description = "Активна"
     is_active.boolean = True
-
-
-@admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
-    """Админка для платежей"""
-
-    list_display = [
-        "id",
-        "user",
-        "tariff",
-        "get_amount_display",
-        "status",
-        "payment_type",
-        "created_at",
-        "paid_at",
-    ]
-    list_filter = [
-        "status",
-        "payment_type",
-        "created_at",
-        "paid_at",
-    ]
-    search_fields = [
-        "user__tg_user_id",
-        "user__username",
-        "user__first_name",
-        "telegram_payment_charge_id",
-        "robokassa_invoice_id",
-    ]
-    readonly_fields = [
-        "created_at",
-        "updated_at",
-        "paid_at",
-    ]
-    raw_id_fields = ["user", "tariff", "subscription"]
-
-    fieldsets = (
-        (
-            "Основная информация",
-            {
-                "fields": (
-                    "user",
-                    "tariff",
-                    "subscription",
-                    "amount",
-                    "currency",
-                )
-            },
-        ),
-        ("Статус и тип", {"fields": ("status", "payment_type")}),
-        (
-            "Telegram Payment",
-            {
-                "fields": (
-                    "telegram_payment_charge_id",
-                    "telegram_provider_payment_charge_id",
-                ),
-                "classes": ("collapse",),
-            },
-        ),
-        (
-            "Robokassa",
-            {
-                "fields": ("robokassa_invoice_id", "robokassa_recurring_id"),
-                "classes": ("collapse",),
-            },
-        ),
-        ("Метаданные", {"fields": ("payment_data",), "classes": ("collapse",)}),
-        (
-            "Временные метки",
-            {
-                "fields": ("created_at", "updated_at", "paid_at"),
-                "classes": ("collapse",),
-            },
-        ),
-    )
-
-    def get_amount_display(self, obj):
-        """Отображение суммы в рублях"""
-        return obj.get_amount_display()
-
-    get_amount_display.short_description = "Сумма"

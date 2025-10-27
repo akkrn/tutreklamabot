@@ -21,7 +21,7 @@ from django.utils import timezone
 from bot.constants import MEDIA_FILES_PATH
 from bot.keyboards import menu_kb
 from bot.middlewares import current_user
-from bot.models import ChannelNews
+from bot.models import ChannelNews, UserSubscription
 from bot.redis_client import get_file_id
 from bot.tools import clean_markdown, send_file, truncate_text
 from bot.translations import get_translation
@@ -52,16 +52,45 @@ async def get_menu(
 
     def get_user_info():
         current_subscription = user.get_subscription_info()
-        tariff_name = current_subscription.get("tariff_name")
+        is_active = current_subscription.get("is_active")
         channels_limit = current_subscription.get("channels_limit")
 
         channels_count = user.subscribed_channels_count
 
-        return tariff_name, channels_limit, channels_count
+        # Получаем активную подписку для детальной информации
+        active_sub = None
+        if is_active:
+            active_sub = UserSubscription.objects.filter(
+                user=user, status=UserSubscription.STATUS_ACTIVE
+            ).first()
 
-    tariff_name, channels_limit, channels_count = await sync_to_async(
-        get_user_info
-    )()
+        next_charge_date = None
+        next_charge_amount = None
+        if active_sub and active_sub.is_recurring_enabled:
+            next_charge_date = active_sub.expires_at.strftime("%d.%m.%y")
+            next_charge_amount = active_sub.tariff.price
+
+        tariff_name = current_subscription.get("tariff_name", "Бесплатный")
+        if is_active and active_sub:
+            tariff_name = f"{channels_limit} Каналов на {active_sub.tariff.duration_days} дней"
+
+        return (
+            tariff_name,
+            channels_limit,
+            channels_count,
+            is_active,
+            next_charge_date,
+            next_charge_amount,
+        )
+
+    (
+        tariff_name,
+        channels_limit,
+        channels_count,
+        is_active,
+        next_charge_date,
+        next_charge_amount,
+    ) = await sync_to_async(get_user_info)()
 
     encoded_id = (
         base64.urlsafe_b64encode(str(message.from_user.id).encode())
@@ -78,12 +107,22 @@ async def get_menu(
     if new_msg_text_key:
         caption = get_translation(new_msg_text_key)
     else:
-        caption = (
-            f"<b>Пользователь:</b> {user_link_formatted}\n\n"
-            f"Тариф: {tariff_name}\n"
-            f"Каналов добавлено: {channels_count}/{channels_limit}\n\n"
-            f"{ref_text}"
-        )
+        caption_lines = [
+            f"<b>Пользователь:</b> {user_link_formatted}\n",
+            f"Каналов добавлено: {channels_count}/{channels_limit}\n\n",
+            f"Тариф: {tariff_name}\n",
+        ]
+
+        # Если есть активная подписка с автоплатежом, добавляем информацию о следующем списании
+        if is_active and next_charge_date and next_charge_amount:
+            caption_lines.append(f"Следующее списание: {next_charge_date}\n")
+            caption_lines.append(
+                f"Сумма следующего списания: {next_charge_amount} ₽\n"
+            )
+
+        caption_lines.append(f"\n{ref_text}")
+
+        caption = "".join(caption_lines)
 
     if is_from_callback:
         await send_image_message(
