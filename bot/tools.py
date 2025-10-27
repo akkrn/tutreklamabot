@@ -2,6 +2,7 @@ import asyncio
 import logging
 import re
 
+import emoji
 from aiogram import Bot
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError
@@ -143,6 +144,7 @@ def clean_markdown(text: str) -> str:
     """Удаляет все элементы Markdown/MarkdownV2-разметки."""
     text = re.sub(_MD_CLEAN_RE, r"\1", text)
     text = text.replace("*", "")
+    text = emoji.replace_emoji(text, replace="")
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"\n{2,}", "\n", text)
     return text.strip()
