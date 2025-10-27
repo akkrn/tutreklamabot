@@ -270,7 +270,7 @@ async def handle_change_tariff(callback: CallbackQuery, state: FSMContext):
 async def handle_cancel_reccurent(callback: CallbackQuery, state: FSMContext):
     """Хендлер кнопки 'Отменить подписку'"""
     cancel_reccurent_text = (
-        "❤️ <b>Внимание!</b> При отключении — ваш тариф сохранится до конца оплаченного срока\n\n"
+        "❤️ <b>Внимание!</b> При отключении — ваш тариф сохранится до конца оплаченного срока.\n\n"
         "Отключаем?"
     )
 

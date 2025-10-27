@@ -47,7 +47,7 @@ def retry_async(retries=3, delay=5):
     return wrapper
 
 
-def _get_media_type(file_path: str) -> str:
+def get_media_type(file_path: str) -> str:
     """Определяет тип медиафайла по MIME или расширению."""
     mime_type, _ = mimetypes.guess_type(file_path)
     if mime_type:
@@ -70,7 +70,7 @@ async def send_file(
 ) -> Message:
     """Send files to Telegam servers and collect file_id in Redis cache"""
 
-    media_type = _get_media_type(file_path)
+    media_type = get_media_type(file_path)
     if media_type == "document":
         logger.error("Попытка отправить файл", file_path=file_path)
 

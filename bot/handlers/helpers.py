@@ -12,6 +12,7 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardMarkup,
     InputMediaPhoto,
+    InputMediaVideo,
     Message,
 )
 from asgiref.sync import sync_to_async
@@ -23,7 +24,7 @@ from bot.keyboards import menu_kb
 from bot.middlewares import current_user
 from bot.models import ChannelNews, UserSubscription
 from bot.redis_client import get_file_id
-from bot.tools import clean_markdown, send_file, truncate_text
+from bot.tools import clean_markdown, get_media_type, send_file, truncate_text
 from bot.translations import get_translation
 
 logger = structlog.getLogger(__name__)
@@ -213,15 +214,22 @@ async def send_file_message(
         logger.error(f"Файл изображения не найден: {file_path}")
         return await message.answer(caption, reply_markup=keyboard)
 
+    media_type = get_media_type(str(file_path))
+
     redis_key = f"image:{file_name}"
     if edit_message:
         try:
             file_id = await get_file_id(redis_key)
 
             if file_id:
-                media = InputMediaPhoto(
-                    media=file_id, caption=caption, parse_mode=parse_mode
-                )
+                if media_type == "video":
+                    media = InputMediaVideo(
+                        media=file_id, caption=caption, parse_mode=parse_mode
+                    )
+                else:
+                    media = InputMediaPhoto(
+                        media=file_id, caption=caption, parse_mode=parse_mode
+                    )
                 result = await bot.edit_message_media(
                     chat_id=message.chat.id,
                     message_id=message.message_id,
