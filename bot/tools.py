@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import mimetypes
 import re
 
 import emoji
@@ -46,6 +47,16 @@ def retry_async(retries=3, delay=5):
     return wrapper
 
 
+def _get_media_type(file_path: str) -> str:
+    """Определяет тип медиафайла по MIME или расширению."""
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if mime_type:
+        main_type = mime_type.split("/")[0]
+        if main_type in ("image", "video"):
+            return "photo" if main_type == "image" else "video"
+    return "document"
+
+
 @retry_async(retries=3, delay=2)
 async def send_file(
     bot: Bot,
@@ -59,35 +70,58 @@ async def send_file(
 ) -> Message:
     """Send files to Telegam servers and collect file_id in Redis cache"""
 
+    media_type = _get_media_type(file_path)
+    if media_type == "document":
+        logger.error("Попытка отправить файл", file_path=file_path)
+
     file_id = await get_file_id(redis_key)
     if file_id:
         try:
+            if media_type == "video":
+                result = await bot.send_video(
+                    user_tg_id,
+                    video=file_id,
+                    caption=caption,
+                    reply_markup=reply_markup,
+                    parse_mode=parse_mode,
+                )
+            else:
+                result = await bot.send_photo(
+                    user_tg_id,
+                    photo=file_id,
+                    caption=caption,
+                    show_caption_above_media=above,
+                    reply_markup=reply_markup,
+                    parse_mode=parse_mode,
+                )
+            return result
+        except TelegramAPIError:
+            await delete_file_id(redis_key)
+    try:
+        file_from_pc = FSInputFile(file_path)
+        if media_type == "video":
+            result = await bot.send_video(
+                user_tg_id,
+                video=file_from_pc,
+                caption=caption,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode,
+            )
+            file_id = result.video.file_id
+        else:
             result = await bot.send_photo(
                 user_tg_id,
-                photo=file_id,
+                photo=file_from_pc,
                 caption=caption,
                 show_caption_above_media=above,
                 reply_markup=reply_markup,
                 parse_mode=parse_mode,
             )
-            return result
-        except TelegramAPIError:
-            await delete_file_id(redis_key)
-    try:
-        image_from_pc = FSInputFile(file_path)
-        result = await bot.send_photo(
-            user_tg_id,
-            photo=image_from_pc,
-            caption=caption,
-            show_caption_above_media=above,
-            reply_markup=reply_markup,
-            parse_mode=parse_mode,
-        )
-        file_id = result.photo[-1].file_id
+            file_id = result.photo[-1].file_id
         await save_file_id(redis_key, file_id)
         return result
     except Exception as e:
-        logger.error(f"При отправке карты произошла ошибка: {e}")
+        logger.error(f"При отправке файла произошла ошибка: {e}")
 
 
 async def send_long(

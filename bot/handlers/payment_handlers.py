@@ -8,7 +8,7 @@ from aiogram.types import (
 )
 from asgiref.sync import sync_to_async
 
-from bot.handlers.helpers import get_menu, send_image_message
+from bot.handlers.helpers import get_menu, send_file_message
 from bot.keyboards import add_channels_with_menu_kb, payment_kb
 from bot.middlewares import current_user
 
@@ -48,9 +48,9 @@ async def handle_success_payment(callback: CallbackQuery, state: FSMContext):
             f"Следующее списание через {tariff.duration_days} дней — {tariff.get_price_display()}\n\n"
             f"Каналов добавлено: {channels_count}/{channels_limit}"
         )
-        await send_image_message(
+        await send_file_message(
             message=callback.message,
-            image_name="payment_success",
+            file_name="payment_success.jpg",
             caption=success_text,
             keyboard=add_channels_with_menu_kb(),
             edit_message=True,
@@ -69,9 +69,9 @@ async def handle_failed_payment(callback: CallbackQuery, state: FSMContext):
 
     failed_text = "❌ Произошла ошибка, попробуйте снова"
 
-    await send_image_message(
+    await send_file_message(
         message=callback.message,
-        image_name="payment_failed",
+        file_name="payment_failed.jpg",
         caption=failed_text,
         keyboard=payment_kb(),
         edit_message=True,

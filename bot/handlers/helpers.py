@@ -125,9 +125,9 @@ async def get_menu(
         caption = "".join(caption_lines)
 
     if is_from_callback:
-        await send_image_message(
+        await send_file_message(
             message=message,
-            image_name="main_menu",
+            file_name="main_menu.jpg",
             caption=caption,
             keyboard=menu_kb(),
             edit_message=True,
@@ -139,9 +139,9 @@ async def get_menu(
         #         )  # TODO проверить, что стоит так делать
         #     await state.update_data(menu_msg_id=result.message_id)
     else:
-        await send_image_message(
+        await send_file_message(
             message=message,
-            image_name="main_menu",
+            file_name="main_menu.jpg",
             caption=caption,
             keyboard=menu_kb(),
             edit_message=False,
@@ -192,9 +192,9 @@ def strip_btns_from_kb(
     return InlineKeyboardMarkup(inline_keyboard=new_rows) if new_rows else None
 
 
-async def send_image_message(
+async def send_file_message(
     message: Message,
-    image_name: str,
+    file_name: str,
     caption: str = "",
     keyboard: InlineKeyboardMarkup | None = None,
     above: bool = False,
@@ -207,13 +207,13 @@ async def send_image_message(
         bot = message.bot
 
     mediafiles_dir: Path = (settings.BASE_DIR / MEDIA_FILES_PATH).resolve()
-    file_path: Path = (mediafiles_dir / f"{image_name}.jpg").resolve()
+    file_path: Path = (mediafiles_dir / file_name).resolve()
 
     if not file_path.exists():
         logger.error(f"Файл изображения не найден: {file_path}")
         return await message.answer(caption, reply_markup=keyboard)
 
-    redis_key = f"image:{image_name}"
+    redis_key = f"image:{file_name}"
     if edit_message:
         try:
             file_id = await get_file_id(redis_key)
@@ -280,7 +280,7 @@ async def send_image_message(
             return result
 
         except Exception as e:
-            logger.error(f"Ошибка при отправке изображения {image_name}: {e}")
+            logger.error(f"Ошибка при отправке файла {file_name}: {e}")
             return await message.answer(caption, reply_markup=keyboard)
 
 

@@ -14,7 +14,7 @@ from django.utils import timezone
 from bot.handlers.helpers import (
     generate_digest_text_paginated,
     get_menu,
-    send_image_message,
+    send_file_message,
 )
 from bot.keyboards import (
     add_channels_kb,
@@ -79,9 +79,9 @@ async def start(message: Message, state: FSMContext, command: CommandObject):
     if command.args:
         await handle_start_referrals(message, user, command.args)
 
-    await send_image_message(
+    await send_file_message(
         message=message,
-        image_name="add_channels",
+        file_name="add_channels.jpg",
         caption="",
         keyboard=add_channels_kb(),
     )
@@ -97,9 +97,9 @@ async def menu_command(message: Message, state: FSMContext):
 async def handle_add_channels(callback: CallbackQuery, state: FSMContext):
     """Обработчик кнопки 'Добавить канал' - устанавливает состояние ожидания ссылок"""
     await state.set_state(AddChannelsStates.waiting_for_links)
-    await send_image_message(
+    await send_file_message(
         message=callback.message,
-        image_name="search",
+        file_name="search.jpg",
         caption="Отправьте одну или несколько ссылок через пробел и бот начнёт отслеживать рекламные посты в этих каналах.",
         keyboard=back_to_menu_kb(),
         edit_message=True,
@@ -138,9 +138,9 @@ async def handle_my_channels(callback: CallbackQuery, state: FSMContext):
             channels_page=0, user_channels_ids=[ch.id for ch in channels]
         )
 
-    await send_image_message(
+    await send_file_message(
         message=callback.message,
-        image_name="channels",
+        file_name="channels.jpg",
         caption=caption,
         keyboard=keyboard,
         edit_message=True,
@@ -184,9 +184,9 @@ async def handle_digest(callback: CallbackQuery, state: FSMContext):
 
     keyboard = digest_kb(page=0, total_pages=total_pages)
 
-    await send_image_message(
+    await send_file_message(
         message=callback.message,
-        image_name="digest",
+        file_name="digest.jpg",
         caption=digest_caption,
         keyboard=keyboard,
         edit_message=True,
@@ -238,9 +238,9 @@ async def handle_support(callback: CallbackQuery, state: FSMContext):
 · Дайте цифры и статистику;
 · Покажите, чем вы лучше конкурентов."""
 
-    await send_image_message(
+    await send_file_message(
         message=callback.message,
-        image_name="support",
+        file_name="video.mp4",
         caption=support_text,
         keyboard=support_kb(),
         edit_message=True,
@@ -257,9 +257,9 @@ async def handle_change_tariff(callback: CallbackQuery, state: FSMContext):
     )
     keyboard = await tariff_kb()
 
-    await send_image_message(
+    await send_file_message(
         message=callback.message,
-        image_name="payment",
+        file_name="payment.jpg",
         caption=tariff_text,
         keyboard=keyboard,
         edit_message=True,
@@ -274,9 +274,9 @@ async def handle_cancel_reccurent(callback: CallbackQuery, state: FSMContext):
         "Отключаем?"
     )
 
-    await send_image_message(
+    await send_file_message(
         message=callback.message,
-        image_name="cancel_subscription",
+        file_name="cancel_subscription.jpg",
         caption=cancel_reccurent_text,
         keyboard=cancel_reccurent_kb(),
         edit_message=True,
@@ -294,9 +294,9 @@ async def handle_cancel_reccurent_done(
         "Автоплатеж отключен. Спасибо за использование нашего сервиса!"
     )
 
-    await send_image_message(
+    await send_file_message(
         message=callback.message,
-        image_name="cancel_subscription_done",
+        file_name="cancel_subscription_done.jpg",
         caption=cancel_reccurent_text,
         keyboard=new_menu_kb(),
         edit_message=True,
@@ -479,9 +479,9 @@ async def process_channel_subscription(
 
         if len(successful_channels) == 1 and len(failed_channels) == 0:
             caption = f"Канал <b>{successful_channels[0]}</b> успешно добавлен!"
-            await send_image_message(
+            await send_file_message(
                 message=message,
-                image_name="one_add",
+                file_name="one_add.jpg",
                 caption=caption,
                 keyboard=add_more_channels_kb(),
             )
@@ -501,25 +501,25 @@ async def process_channel_subscription(
             caption = f"""<b>Чудесно!</b> ✨ Теперь вы будете получать уведомления о рекламе из этих каналов.
 
             <b>Каналов добавлено:</b> {channels_count}/{channels_limit}"""
-            await send_image_message(
+            await send_file_message(
                 message=message,
-                image_name="many_add",
+                file_name="many_add.jpg",
                 caption=caption,
                 keyboard=add_more_channels_kb(),
             )
         elif len(successful_channels) > 1:
             caption = f"<b>Где-то допущена ошибка.</b> Все каналы добавлены, кроме:\n\n {'\n'.join(failed_channels)}"
-            await send_image_message(
+            await send_file_message(
                 message=message,
-                image_name="almost",
+                file_name="almost.jpg",
                 caption=caption,
                 keyboard=add_more_channels_kb(),
             )
         else:
             caption = "<b>Каналы не найдены.</b> Возможно, вы пропустили пробелы между ссылками."
-            await send_image_message(
+            await send_file_message(
                 message=message,
-                image_name="error",
+                file_name="error.jpg",
                 caption=caption,
                 keyboard=add_channels_with_menu_kb(),
             )
@@ -529,9 +529,9 @@ async def process_channel_subscription(
         logger.error(
             f"Ошибка при обработке каналов через Redis: {e}", exc_info=True
         )
-        await send_image_message(
+        await send_file_message(
             message=message,
-            image_name="error",
+            file_name="error.jpg",
             caption="Произошла ошибка при добавлении каналов. Попробуйте еще раз.",
             keyboard=add_channels_with_menu_kb(),
         )
@@ -567,8 +567,11 @@ async def handle_channel_links(message: Message, state: FSMContext):
                 user, len(channel_links)
             )
             if not can_add:
-                await send_image_message(
-                    message, "limit", limit_message, limit_reached_kb()
+                await send_file_message(
+                    message=message,
+                    file_name="limit.jpg",
+                    caption=limit_message,
+                    keyboard=limit_reached_kb(),
                 )
                 return
             await state.update_data(channel_links=channel_links)
@@ -589,8 +592,11 @@ async def handle_channel_links(message: Message, state: FSMContext):
 
     can_add, limit_message = await check_channel_limit(user, len(channel_links))
     if not can_add:
-        await send_image_message(
-            message, "limit", limit_message, limit_reached_kb()
+        await send_file_message(
+            message=message,
+            file_name="limit.jpg",
+            caption=limit_message,
+            keyboard=limit_reached_kb(),
         )
         return
 
