@@ -12,6 +12,7 @@ from django.views.decorators.http import require_http_methods
 from bot.models import Payment, Tariff, User, UserSubscription
 from bot.services.payment_service import process_payment_result
 from core.event_manager import EventType, event_manager
+from core.redis_manager import redis_manager
 from userbot.redis_messages import PaymentNotificationMessage
 
 logger = structlog.getLogger(__name__)
@@ -225,7 +226,11 @@ async def _send_payment_notification_via_redis(
     payment: Payment, success: bool
 ) -> None:
     """Отправляет уведомление о платеже через Redis"""
+
     try:
+        # Подключаемся к Redis если еще не подключены
+        # Метод connect() сам проверяет, нужно ли подключаться
+        await redis_manager.connect()
 
         def get_user_info():
             user = payment.user
