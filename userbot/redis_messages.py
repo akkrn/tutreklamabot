@@ -50,6 +50,7 @@ class ChannelResult:
     title: Optional[str] = None
     username: Optional[str] = None
     error_message: Optional[str] = None
+    userbot_id: int = 0
 
 
 @dataclass

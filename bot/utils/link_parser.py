@@ -3,11 +3,14 @@ import re
 
 def parse_channel_links(text: str) -> list[str]:
     """Парсит текст и извлекает только валидные ссылки на Telegram каналы"""
+    # Порядок важен! Более специфичные паттерны должны быть первыми
     patterns = [
-        r"t\.me/[a-zA-Z0-9_]+",  # t.me/channel
-        r"https://t\.me/[a-zA-Z0-9_]+",  # https://t.me/channel
-        r"t\.me/\+[a-zA-Z0-9_-]+",  # t.me/+private_link
+        r"https://t\.me/joinchat/[a-zA-Z0-9_-]+",  # https://t.me/joinchat/hash (первым, чтобы не захватить только joinchat)
+        r"t\.me/joinchat/[a-zA-Z0-9_-]+",  # t.me/joinchat/hash
         r"https://t\.me/\+[a-zA-Z0-9_-]+",  # https://t.me/+private_link
+        r"t\.me/\+[a-zA-Z0-9_-]+",  # t.me/+private_link
+        r"https://t\.me/(?!joinchat)[a-zA-Z0-9_]+",  # https://t.me/channel (исключая joinchat)
+        r"t\.me/(?!joinchat|\+)[a-zA-Z0-9_]+",  # t.me/channel (исключая joinchat и +)
     ]
 
     valid_links = []
