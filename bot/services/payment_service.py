@@ -31,11 +31,17 @@ def generate_payment_url_direct(
     Используется для формирования клавиатуры.
     """
     timestamp = int(timezone.now().timestamp())
+    # Ограничиваем inv_id до диапазона PositiveIntegerField (1-2147483647)
+    # Используем более компактную формулу
     inv_id = (
-        (user.tg_user_id % 1000000) * 1000000
-        + (tariff.id % 10000) * 100
-        + (timestamp % 100)
+        (user.tg_user_id % 100000) * 10000
+        + (tariff.id % 1000) * 10
+        + (timestamp % 10)
     )
+    # Дополнительно ограничиваем до максимального значения
+    inv_id = inv_id % 2147483647
+    if inv_id == 0:
+        inv_id = 1  # PositiveIntegerField не допускает 0
 
     # Создаем клиент Robokassa
     client = get_robokassa_client()
@@ -79,9 +85,19 @@ def process_payment_result(
     """Обработка результата платежа от Robokassa.
     Создает или продлевает подписку на основе inv_id.
     """
-    # Конвертируем inv_id в int
+    # Конвертируем inv_id в int и ограничиваем до диапазона PositiveIntegerField
     try:
         inv_id_int = int(inv_id)
+        # Ограничиваем до максимального значения PositiveIntegerField (2147483647)
+        MAX_INVOICE_ID = 2147483647
+        if inv_id_int > MAX_INVOICE_ID:
+            inv_id_int = inv_id_int % MAX_INVOICE_ID
+            if inv_id_int == 0:
+                inv_id_int = 1  # PositiveIntegerField не допускает 0
+        elif inv_id_int < 1:
+            inv_id_int = abs(inv_id_int) % MAX_INVOICE_ID
+            if inv_id_int == 0:
+                inv_id_int = 1
     except ValueError:
         logger.error(
             "Некорректный формат inv_id",

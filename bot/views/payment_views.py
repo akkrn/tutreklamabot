@@ -39,24 +39,6 @@ def is_ip_allowed(client_ip: str) -> bool:
         return False
 
 
-def process_payment(
-    inv_id: str,
-    out_sum: str,
-    signature: str,
-    **kwargs,
-) -> tuple[bool, str]:
-    """Обработка платежа через payment_service."""
-
-    success, message = process_payment_result(
-        inv_id=inv_id,
-        out_sum=out_sum,
-        signature=signature,
-        **kwargs,
-    )
-
-    return success, message
-
-
 @csrf_exempt
 @require_http_methods(["POST"])
 def robokassa_result(request):
@@ -104,7 +86,7 @@ def robokassa_result(request):
     shp_tariff_id = int(shp_tariff_id) if shp_tariff_id else None
     shp_message_id = int(shp_message_id) if shp_message_id else None
 
-    success, message = process_payment(
+    success, message = process_payment_result(
         inv_id=inv_id,
         out_sum=out_sum,
         signature=signature,
