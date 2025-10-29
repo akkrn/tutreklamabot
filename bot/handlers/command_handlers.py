@@ -18,7 +18,6 @@ from bot.handlers.helpers import (
 )
 from bot.keyboards import (
     add_channels_kb,
-    add_channels_with_menu_kb,
     add_more_channels_kb,
     back_to_menu_kb,
     cancel_reccurent_kb,
@@ -474,57 +473,59 @@ async def process_channel_subscription(
                     channel_created=created,
                 )
             else:
-                failed_channels.append(
-                    f"• {result.link} - {result.error_message or 'неизвестная ошибка'}"
-                )
+                failed_channels.append(f"• {result.link}")
 
+        def get_user_info():
+            user = current_user.get()
+            current_subscription = user.get_subscription_info()
+            channels_limit = current_subscription.get("channels_limit")
+            channels_count = user.subscribed_channels_count
+            return channels_limit, channels_count
+
+        channels_limit, channels_count = await sync_to_async(get_user_info)()
         if len(successful_channels) == 1 and len(failed_channels) == 0:
-            caption = f"Канал <b>{successful_channels[0]}</b> успешно добавлен!"
+            caption = f"""Канал <b>{successful_channels[0]}</b> успешно добавлен!
+
+<b>Каналов добавлено:</b> {channels_count}/{channels_limit}"""
             await send_file_message(
                 message=message,
                 file_name="one_add.jpg",
                 caption=caption,
                 keyboard=add_more_channels_kb(),
             )
+            return True
         elif len(successful_channels) > 1 and len(failed_channels) == 0:
-
-            def get_user_info():
-                user = current_user.get()
-                current_subscription = user.get_subscription_info()
-                channels_limit = current_subscription.get("channels_limit")
-                channels_count = user.subscribed_channels_count
-                return channels_limit, channels_count
-
-            channels_limit, channels_count = await sync_to_async(
-                get_user_info
-            )()
-
             caption = f"""<b>Чудесно!</b> ✨ Теперь вы будете получать уведомления о рекламе из этих каналов.
 
-            <b>Каналов добавлено:</b> {channels_count}/{channels_limit}"""
+<b>Каналов добавлено:</b> {channels_count}/{channels_limit}"""
             await send_file_message(
                 message=message,
                 file_name="many_add.jpg",
                 caption=caption,
                 keyboard=add_more_channels_kb(),
             )
-        elif len(successful_channels) > 1:
-            caption = f"<b>Где-то допущена ошибка.</b> Все каналы добавлены, кроме:\n\n {'\n'.join(failed_channels)}"
+            return True
+        elif len(successful_channels) > 0:
+            caption = f"""<b>Где-то допущена ошибка.</b>
+
+<b>Каналов добавлено:</b> {channels_count}/{channels_limit}, кроме:
+\n{'\n'.join(failed_channels)}"""
             await send_file_message(
                 message=message,
                 file_name="almost.jpg",
                 caption=caption,
                 keyboard=add_more_channels_kb(),
             )
+            return True
         else:
             caption = "<b>Каналы не найдены.</b> Возможно, вы пропустили пробелы между ссылками."
             await send_file_message(
                 message=message,
                 file_name="error.jpg",
                 caption=caption,
-                keyboard=add_channels_with_menu_kb(),
+                keyboard=back_to_menu_kb(),
             )
-            return
+            return False
 
     except Exception as e:
         logger.error(
@@ -534,9 +535,9 @@ async def process_channel_subscription(
             message=message,
             file_name="error.jpg",
             caption="Произошла ошибка при добавлении каналов. Попробуйте еще раз.",
-            keyboard=add_channels_with_menu_kb(),
+            keyboard=back_to_menu_kb(),
         )
-        return
+        return False
 
 
 @router.message(Command("remove"))
@@ -602,6 +603,6 @@ async def handle_channel_links(message: Message, state: FSMContext):
         return
 
     await state.update_data(channel_links=channel_links)
-    await process_channel_subscription(message, state, channel_links)
-
-    await state.clear()
+    result = await process_channel_subscription(message, state, channel_links)
+    if result:
+        await state.clear()
