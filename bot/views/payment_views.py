@@ -146,22 +146,42 @@ def robokassa_result(request):
         subscription = UserSubscription.objects.get(robokassa_invoice_id=inv_id)
         chat_id = subscription.user.tg_chat_id or subscription.user.tg_user_id
 
+        logger.info(
+            "Отправляем уведомление об успешной оплате",
+            user_id=subscription.user.tg_user_id,
+            subscription_id=subscription.id,
+            chat_id=chat_id,
+            message_id=shp_message_id,
+        )
+
         # Запускаем в отдельном потоке через asyncio.run
         def run_notification():
-            asyncio.run(
-                send_payment_notification(
+            try:
+                asyncio.run(
+                    send_payment_notification(
+                        user_id=subscription.user.tg_user_id,
+                        subscription_id=subscription.id,
+                        success=True,
+                        chat_id=chat_id,
+                        message_id=shp_message_id,
+                    )
+                )
+            except Exception as e:
+                logger.error(
+                    "Ошибка при отправке уведомления об оплате",
+                    error=str(e),
                     user_id=subscription.user.tg_user_id,
                     subscription_id=subscription.id,
-                    success=True,
-                    chat_id=chat_id,
-                    message_id=shp_message_id,
+                    exc_info=True,
                 )
-            )
 
         thread = threading.Thread(target=run_notification, daemon=True)
         thread.start()
     except UserSubscription.DoesNotExist:
-        pass
+        logger.warning(
+            "Подписка не найдена для отправки уведомления",
+            inv_id=inv_id,
+        )
 
     return HttpResponse(message, content_type="text/plain")
 
@@ -174,6 +194,15 @@ async def send_payment_notification(
     message_id: int | None = None,
 ) -> None:
     """Отправляет уведомление пользователю о результате оплаты."""
+    logger.info(
+        "Начало отправки уведомления об оплате",
+        user_id=user_id,
+        subscription_id=subscription_id,
+        success=success,
+        chat_id=chat_id,
+        message_id=message_id,
+    )
+
     # Импортируем здесь, чтобы избежать циклических зависимостей
     bot = Bot(
         token=settings.BOT_TOKEN,
@@ -254,5 +283,24 @@ async def send_payment_notification(
                 reply_markup=keyboard,
                 parse_mode="HTML",
             )
+
+        logger.info(
+            "Уведомление об оплате успешно отправлено",
+            user_id=user_id,
+            subscription_id=subscription_id,
+            success=success,
+        )
+    except Exception as e:
+        logger.error(
+            "Ошибка при отправке уведомления об оплате",
+            error=str(e),
+            user_id=user_id,
+            subscription_id=subscription_id,
+            success=success,
+            chat_id=chat_id,
+            message_id=message_id,
+            exc_info=True,
+        )
+        raise
     finally:
         await bot.session.close()
