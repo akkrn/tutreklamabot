@@ -14,7 +14,6 @@ from bot.handlers.helpers import send_file_message
 from bot.keyboards import add_channels_with_menu_kb, payment_kb
 from bot.models import User, UserSubscription
 from bot.services.payment_service import (
-    check_signature_result,
     process_payment_result,
 )
 
@@ -44,32 +43,15 @@ def process_payment(
     inv_id: str,
     out_sum: str,
     signature: str,
-    shp_user_id: int | None = None,
-    shp_tariff_id: int | None = None,
+    **kwargs,
 ) -> tuple[bool, str]:
     """Обработка платежа через payment_service."""
 
-    # Проверяем подпись
-    if not check_signature_result(
-        inv_id,
-        out_sum,
-        signature,
-        shp_user_id=shp_user_id,
-        shp_tariff_id=shp_tariff_id,
-    ):
-        logger.error(
-            "Некорректная подпись платежа",
-            inv_id=inv_id,
-        )
-        return False, "invalid signature"
-
-    # Обрабатываем платеж через payment_service
     success, message = process_payment_result(
         inv_id=inv_id,
         out_sum=out_sum,
         signature=signature,
-        shp_user_id=shp_user_id,
-        shp_tariff_id=shp_tariff_id,
+        **kwargs,
     )
 
     return success, message
@@ -128,6 +110,7 @@ def robokassa_result(request):
         signature=signature,
         shp_user_id=shp_user_id,
         shp_tariff_id=shp_tariff_id,
+        shp_message_id=shp_message_id,
     )
 
     if not success:
