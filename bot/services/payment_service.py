@@ -24,6 +24,7 @@ def get_robokassa_client() -> Robokassa:
 def generate_payment_url_direct(
     user: User,
     tariff: Tariff,
+    message_id: int | None = None,
 ) -> str:
     """
     Генерация URL для оплаты без создания записи в БД.
@@ -45,6 +46,7 @@ def generate_payment_url_direct(
         recurring=True,
         user_id=user.tg_user_id,
         tariff_id=tariff.id,
+        message_id=message_id,
     )
 
     return result.url

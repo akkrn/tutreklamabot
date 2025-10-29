@@ -224,7 +224,7 @@ def create_inline_kb(
     return kb_builder.as_markup()
 
 
-async def tariff_kb() -> InlineKeyboardMarkup:
+async def tariff_kb(message_id: int | None = None) -> InlineKeyboardMarkup:
     """Клавиатура с тарифами, каждая кнопка открывает WebApp (Robokassa)."""
 
     kb_builder = InlineKeyboardBuilder()
@@ -241,7 +241,7 @@ async def tariff_kb() -> InlineKeyboardMarkup:
         # Текст кнопки: Название тарифа — Цена
         button_text = f"{tariff.get_price_display()} — {tariff.channels_limit} Каналов ({tariff.duration_days} дней)"
 
-        provider_url = generate_payment_url_direct(user, tariff)
+        provider_url = generate_payment_url_direct(user, tariff, message_id)
 
         kb_builder.row(
             InlineKeyboardButton(

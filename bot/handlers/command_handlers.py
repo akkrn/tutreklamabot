@@ -255,7 +255,8 @@ async def handle_change_tariff(callback: CallbackQuery, state: FSMContext):
         "и соглашение о присоединении к <a href='https://telegra.ph/Soglashenie-o-prisoedinenii-k-rekurrentnoj-sisteme-platezhej-10-21'>рекуррентной системе</a> платежей.\n\n"
         "Перед оплатой рекомендуем отключить VPN."
     )
-    keyboard = await tariff_kb()
+    message_id = callback.message.message_id if callback.message else None
+    keyboard = await tariff_kb(message_id=message_id)
 
     await send_file_message(
         message=callback.message,
