@@ -99,7 +99,8 @@ def robokassa_result(request):
         )
         return HttpResponseBadRequest("user or tariff not found")
 
-    payment, created = Payment.objects.create(
+    # Ищем или создаем платеж по invoice_id
+    payment, created = Payment.objects.get_or_create(
         robokassa_invoice_id=inv_id_int,
         defaults={
             "user": user,
@@ -110,13 +111,46 @@ def robokassa_result(request):
         },
     )
 
-    logger.info(
-        "Создан новый платеж",
-        payment_id=payment.id,
-        inv_id=inv_id,
-        user_id=user.tg_user_id,
-        tariff_id=tariff.id,
-    )
+    if not created:
+        # Обновляем данные платежа, если он уже существует
+        # Но не меняем статус, если платеж уже успешно обработан
+        payment.amount = amount_int
+        if shp_message_id:
+            payment.message_id = shp_message_id
+
+        # Обновляем статус только если платеж еще не обработан
+        if payment.status not in [
+            Payment.STATUS_SUCCESS,
+            Payment.STATUS_FAILED,
+        ]:
+            payment.status = Payment.STATUS_PENDING
+
+        payment.save()
+        logger.info(
+            "Обновлен существующий платеж",
+            payment_id=payment.id,
+            inv_id=inv_id,
+            current_status=payment.status,
+        )
+    else:
+        logger.info(
+            "Создан новый платеж",
+            payment_id=payment.id,
+            inv_id=inv_id,
+            user_id=user.tg_user_id,
+            tariff_id=tariff.id,
+        )
+
+    # Проверяем, не обработан ли платеж уже
+    if payment.status == Payment.STATUS_SUCCESS:
+        logger.info(
+            "Платеж уже успешно обработан, пропускаем повторную обработку",
+            payment_id=payment.id,
+            inv_id=inv_id,
+        )
+        # Отправляем уведомление (на случай если оно не было отправлено ранее)
+        asyncio.run(_send_payment_notification_via_redis(payment, success=True))
+        return HttpResponse(f"OK{inv_id}", content_type="text/plain")
 
     success, message = process_payment_result(
         inv_id=inv_id,
