@@ -1,4 +1,6 @@
+import asyncio
 import ipaddress
+import threading
 
 import structlog
 from aiogram import Bot
@@ -116,20 +118,24 @@ def robokassa_result(request):
             )
 
             # Отправляем уведомление об ошибке
-            import asyncio
-
             chat_id = (
                 subscription.user.tg_chat_id or subscription.user.tg_user_id
             )
-            asyncio.create_task(
-                send_payment_notification(
-                    user_id=subscription.user.tg_user_id,
-                    subscription_id=subscription.id,
-                    success=False,
-                    chat_id=chat_id,
-                    message_id=shp_message_id,
+
+            # Запускаем в отдельном потоке через asyncio.run
+            def run_notification():
+                asyncio.run(
+                    send_payment_notification(
+                        user_id=subscription.user.tg_user_id,
+                        subscription_id=subscription.id,
+                        success=False,
+                        chat_id=chat_id,
+                        message_id=shp_message_id,
+                    )
                 )
-            )
+
+            thread = threading.Thread(target=run_notification, daemon=True)
+            thread.start()
         except UserSubscription.DoesNotExist:
             pass
 
@@ -138,18 +144,22 @@ def robokassa_result(request):
     # Отправляем уведомление об успешной оплате
     try:
         subscription = UserSubscription.objects.get(robokassa_invoice_id=inv_id)
-        import asyncio
-
         chat_id = subscription.user.tg_chat_id or subscription.user.tg_user_id
-        asyncio.create_task(
-            send_payment_notification(
-                user_id=subscription.user.tg_user_id,
-                subscription_id=subscription.id,
-                success=True,
-                chat_id=chat_id,
-                message_id=shp_message_id,
+
+        # Запускаем в отдельном потоке через asyncio.run
+        def run_notification():
+            asyncio.run(
+                send_payment_notification(
+                    user_id=subscription.user.tg_user_id,
+                    subscription_id=subscription.id,
+                    success=True,
+                    chat_id=chat_id,
+                    message_id=shp_message_id,
+                )
             )
-        )
+
+        thread = threading.Thread(target=run_notification, daemon=True)
+        thread.start()
     except UserSubscription.DoesNotExist:
         pass
 
