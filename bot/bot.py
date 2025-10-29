@@ -16,6 +16,9 @@ from bot.handlers import (
     payment_handlers,
     status_handlers,
 )
+from bot.handlers.payment_notification_handler import (
+    PaymentNotificationHandler,
+)
 from bot.middlewares import (
     CurrentUserMiddleware,
     IgnoreMessageNotModifiedMiddleware,
@@ -35,14 +38,23 @@ async def on_startup(bot: Bot):
     await bot.set_my_commands(COMMANDS_RU, scope=BotCommandScopeDefault())
 
     global ad_handler
+    global payment_notification_handler
+
     ad_handler = AdNotificationHandler(bot)
+    payment_notification_handler = PaymentNotificationHandler(bot)
 
     event_manager.register_handler(
         EventType.NEW_AD_MESSAGE, ad_handler.handle_new_ad, "bot:new_ad"
     )
 
+    event_manager.register_handler(
+        EventType.PAYMENT_NOTIFICATION,
+        payment_notification_handler.handle_payment_notification,
+        "bot:payment_notification",
+    )
+
     await event_manager.start_listening()
-    logger.info("Запущен обработчик уведомлений о рекламе")
+    logger.info("Запущены обработчики уведомлений")
 
 
 async def on_shutdown(bot: Bot):

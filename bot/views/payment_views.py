@@ -1,23 +1,18 @@
 import asyncio
 import ipaddress
-import threading
 
 import structlog
-from aiogram import Bot
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseBadRequest
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from bot.handlers.helpers import send_file_message
-from bot.keyboards import add_channels_with_menu_kb, payment_kb
-from bot.models import User, UserSubscription
-from bot.services.payment_service import (
-    process_payment_result,
-)
+from bot.models import Payment, Tariff, User, UserSubscription
+from bot.services.payment_service import process_payment_result
+from core.event_manager import EventType, event_manager
+from userbot.redis_messages import PaymentNotificationMessage
 
 logger = structlog.getLogger(__name__)
 
@@ -88,6 +83,41 @@ def robokassa_result(request):
     shp_tariff_id = int(shp_tariff_id) if shp_tariff_id else None
     shp_message_id = int(shp_message_id) if shp_message_id else None
 
+    inv_id_int = int(inv_id)
+    amount_int = int(float(out_sum))
+
+    try:
+        user = User.objects.get(tg_user_id=shp_user_id)
+        tariff = Tariff.objects.get(id=shp_tariff_id)
+    except (User.DoesNotExist, Tariff.DoesNotExist) as e:
+        logger.error(
+            "Пользователь или тариф не найдены",
+            inv_id=inv_id,
+            user_id=shp_user_id,
+            tariff_id=shp_tariff_id,
+            error=str(e),
+        )
+        return HttpResponseBadRequest("user or tariff not found")
+
+    payment, created = Payment.objects.create(
+        robokassa_invoice_id=inv_id_int,
+        defaults={
+            "user": user,
+            "tariff": tariff,
+            "amount": amount_int,
+            "status": Payment.STATUS_PENDING,
+            "message_id": shp_message_id,
+        },
+    )
+
+    logger.info(
+        "Создан новый платеж",
+        payment_id=payment.id,
+        inv_id=inv_id,
+        user_id=user.tg_user_id,
+        tariff_id=tariff.id,
+    )
+
     success, message = process_payment_result(
         inv_id=inv_id,
         out_sum=out_sum,
@@ -101,206 +131,126 @@ def robokassa_result(request):
         logger.error(
             "Ошибка при обработке платежа",
             inv_id=inv_id,
-            message=message,
+            payment_id=payment.id,
+            error=message,
         )
 
-        # Отмечаем подписку как неудачную
-        try:
-            subscription = UserSubscription.objects.get(
-                robokassa_invoice_id=inv_id
-            )
-            subscription.status = UserSubscription.STATUS_UNPAID
-            subscription.save()
+        payment.status = Payment.STATUS_FAILED
+        payment.error_message = message
+        payment.save()
 
-            logger.info(
-                "Подписка переведена в статус 'Неоплачена'",
-                subscription_id=subscription.id,
-            )
-
-            # Отправляем уведомление об ошибке
-            chat_id = (
-                subscription.user.tg_chat_id or subscription.user.tg_user_id
-            )
-
-            # Запускаем в отдельном потоке через asyncio.run
-            def run_notification():
-                asyncio.run(
-                    send_payment_notification(
-                        user_id=subscription.user.tg_user_id,
-                        subscription_id=subscription.id,
-                        success=False,
-                        chat_id=chat_id,
-                        message_id=shp_message_id,
-                    )
-                )
-
-            thread = threading.Thread(target=run_notification, daemon=True)
-            thread.start()
-        except UserSubscription.DoesNotExist:
-            pass
-
+        asyncio.run(
+            _send_payment_notification_via_redis(payment, success=False)
+        )
         return HttpResponseBadRequest(message)
 
-    # Отправляем уведомление об успешной оплате
+    payment.status = Payment.STATUS_SUCCESS
+    payment.processed_at = timezone.now()
+
     try:
-        subscription = UserSubscription.objects.get(robokassa_invoice_id=inv_id)
-        chat_id = subscription.user.tg_chat_id or subscription.user.tg_user_id
+        # Ищем подписку по пользователю и тарифу (последнюю созданную)
+        subscription = payment.user.get_subscription_for_tariff(payment.tariff)
 
-        logger.info(
-            "Отправляем уведомление об успешной оплате",
-            user_id=subscription.user.tg_user_id,
-            subscription_id=subscription.id,
-            chat_id=chat_id,
-            message_id=shp_message_id,
-        )
-
-        # Запускаем в отдельном потоке через asyncio.run
-        def run_notification():
-            try:
-                asyncio.run(
-                    send_payment_notification(
-                        user_id=subscription.user.tg_user_id,
-                        subscription_id=subscription.id,
-                        success=True,
-                        chat_id=chat_id,
-                        message_id=shp_message_id,
-                    )
+        if not subscription:
+            subscription = (
+                UserSubscription.objects.filter(
+                    user=payment.user,
+                    tariff=payment.tariff,
                 )
-            except Exception as e:
-                logger.error(
-                    "Ошибка при отправке уведомления об оплате",
-                    error=str(e),
-                    user_id=subscription.user.tg_user_id,
-                    subscription_id=subscription.id,
-                    exc_info=True,
-                )
+                .order_by("-created_at")
+                .first()
+            )
 
-        thread = threading.Thread(target=run_notification, daemon=True)
-        thread.start()
-    except UserSubscription.DoesNotExist:
-        logger.warning(
-            "Подписка не найдена для отправки уведомления",
+        if subscription:
+            payment.subscription = subscription
+        else:
+            logger.warning(
+                "Подписка не найдена для платежа",
+                inv_id=inv_id,
+                payment_id=payment.id,
+                user_id=payment.user.tg_user_id,
+                tariff_id=payment.tariff.id,
+            )
+
+    except Exception as e:
+        logger.error(
+            "Ошибка при поиске подписки для платежа",
             inv_id=inv_id,
+            payment_id=payment.id,
+            error=str(e),
+            exc_info=True,
         )
 
-    return HttpResponse(message, content_type="text/plain")
+    payment.save()
+
+    asyncio.run(_send_payment_notification_via_redis(payment, success=True))
+    return HttpResponse(f"OK{inv_id}", content_type="text/plain")
 
 
-async def send_payment_notification(
-    user_id: int,
-    subscription_id: int,
-    success: bool,
-    chat_id: int | None = None,
-    message_id: int | None = None,
+async def _send_payment_notification_via_redis(
+    payment: Payment, success: bool
 ) -> None:
-    """Отправляет уведомление пользователю о результате оплаты."""
-    logger.info(
-        "Начало отправки уведомления об оплате",
-        user_id=user_id,
-        subscription_id=subscription_id,
-        success=success,
-        chat_id=chat_id,
-        message_id=message_id,
-    )
-
-    # Импортируем здесь, чтобы избежать циклических зависимостей
-    bot = Bot(
-        token=settings.BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
-
+    """Отправляет уведомление о платеже через Redis"""
     try:
 
-        def get_user_and_subscription():
-            user = User.objects.get(tg_user_id=user_id)
-            subscription = UserSubscription.objects.get(id=subscription_id)
-            return user, subscription
+        def get_user_info():
+            user = payment.user
+            subscription = payment.subscription
+            tariff = payment.tariff
 
-        user, subscription = await sync_to_async(get_user_and_subscription)()
-
-        if success:
-            tariff = subscription.tariff
             channels_count = user.subscribed_channels_count
-            channels_limit = subscription.tariff.channels_limit
-
-            success_text = (
-                f"✅ <b>Успешная оплата!</b> ✨\n\n"
-                f"Следующее списание через {tariff.duration_days} дней — {tariff.get_price_display()}\n\n"
-                f"Каналов добавлено: {channels_count}/{channels_limit}"
+            channels_limit = (
+                subscription.tariff.channels_limit
+                if subscription
+                else tariff.channels_limit
             )
 
-            keyboard = add_channels_with_menu_kb()
-            file_name = "payment_success.jpg"
-        else:
-            failed_text = "❌ Произошла ошибка, попробуйте снова"
-
-            keyboard = payment_kb()
-            success_text = failed_text
-            file_name = "payment_failed.jpg"
-
-        # Если есть message_id и chat_id, редактируем сообщение
-        if message_id and chat_id:
-            try:
-                # Создаем фиктивный объект Message для использования в send_file_message
-                class FakeMessage:
-                    def __init__(
-                        self, bot_instance, chat_id_val, message_id_val
-                    ):
-                        self.bot = bot_instance
-                        self.chat = type("chat", (), {"id": chat_id_val})()
-                        self.message_id = message_id_val
-                        self.from_user = None
-
-                fake_message = FakeMessage(bot, chat_id, message_id)
-
-                await send_file_message(
-                    message=fake_message,
-                    file_name=file_name,
-                    caption=success_text,
-                    keyboard=keyboard,
-                    bot=bot,
-                    edit_message=True,
-                )
-            except Exception as e:
-                logger.error(
-                    "Ошибка при редактировании сообщения",
-                    error=str(e),
-                    chat_id=chat_id,
-                    message_id=message_id,
-                )
-                # Если не удалось отредактировать, отправляем новое сообщение
-                await bot.send_message(
-                    chat_id=user_id,
-                    text=success_text,
-                    reply_markup=keyboard,
-                    parse_mode="HTML",
-                )
-        else:
-            # Отправляем новое сообщение, если нет данных для редактирования
-            await bot.send_message(
-                chat_id=user_id,
-                text=success_text,
-                reply_markup=keyboard,
-                parse_mode="HTML",
+            return (
+                user.tg_user_id,
+                user.tg_chat_id or user.tg_user_id,
+                tariff,
+                channels_count,
+                channels_limit,
             )
+
+        (
+            user_id,
+            chat_id,
+            tariff,
+            channels_count,
+            channels_limit,
+        ) = await sync_to_async(get_user_info)()
+
+        notification = PaymentNotificationMessage(
+            user_id=user_id,
+            payment_id=payment.id,
+            success=success,
+            chat_id=chat_id,
+            message_id=payment.message_id,
+            tariff_name=tariff.name,
+            tariff_price=tariff.get_price_display(),
+            tariff_duration_days=tariff.duration_days,
+            channels_count=channels_count,
+            channels_limit=channels_limit,
+            error_message=payment.error_message if not success else None,
+        )
+
+        await event_manager.publish_event(
+            EventType.PAYMENT_NOTIFICATION,
+            notification,
+            "bot:payment_notification",
+        )
 
         logger.info(
-            "Уведомление об оплате успешно отправлено",
+            "Уведомление о платеже отправлено через Redis",
+            payment_id=payment.id,
             user_id=user_id,
-            subscription_id=subscription_id,
             success=success,
         )
     except Exception as e:
         logger.error(
-            "Ошибка при отправке уведомления об оплате",
+            "Ошибка при отправке уведомления о платеже через Redis",
             error=str(e),
-            user_id=user_id,
-            subscription_id=subscription_id,
-            success=success,
-            chat_id=chat_id,
-            message_id=message_id,
+            payment_id=payment.id,
             exc_info=True,
         )
-        raise
-    finally:
-        await bot.session.close()

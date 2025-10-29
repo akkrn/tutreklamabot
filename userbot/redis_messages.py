@@ -12,6 +12,7 @@ class MessageType(Enum):
     SUBSCRIBE_CHANNELS = "subscribe_channels"
     SUBSCRIBE_RESPONSE = "subscribe_response"
     NEW_AD_MESSAGE = "new_ad_message"
+    PAYMENT_NOTIFICATION = "payment_notification"
 
 
 @dataclass
@@ -77,6 +78,24 @@ def serialize_message(message) -> str:
     except Exception as e:
         logger.error(f"Ошибка сериализации сообщения: {e}")
         return ""
+
+
+@dataclass
+class PaymentNotificationMessage:
+    """Уведомление о результате платежа для отправки пользователю"""
+
+    message_type: str = MessageType.PAYMENT_NOTIFICATION.value
+    user_id: int = 0
+    payment_id: int = 0
+    success: bool = False
+    chat_id: int | None = None
+    message_id: int | None = None
+    tariff_name: str = ""
+    tariff_price: str = ""
+    tariff_duration_days: int = 0
+    channels_count: int = 0
+    channels_limit: int = 0
+    error_message: str | None = None
 
 
 def deserialize_message(data: str, message_class):

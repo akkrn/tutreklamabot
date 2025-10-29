@@ -82,9 +82,8 @@ class User(models.Model):
 
     def get_current_tariff(self):
         """Возвращает текущий активный тариф пользователя"""
-        return self.subscriptions.filter(
-            status=UserSubscription.STATUS_ACTIVE, expires_at__gt=timezone.now()
-        ).first()
+        effective_sub = self.get_effective_subscription()
+        return effective_sub if effective_sub else None
 
     def get_channels_limit(self):
         """Возвращает лимит каналов для текущего тарифа"""
@@ -116,6 +115,108 @@ class User(models.Model):
     def subscribed_channels_count(self):
         """Количество подписанных каналов"""
         return self.channels.count()
+
+    def get_active_subscriptions(self) -> list[dict]:
+        """
+        Возвращает список активных подписок пользователя с корректировками дат.
+        Учитывает логику перекрывающихся подписок:
+        - Если новая подписка закончилась, но появилась в рамках действия старой,
+          то старая должна отработать еще столько дней, сколько оставалось.
+
+        Возвращает список словарей с подпиской и скорректированной датой окончания.
+        """
+        now = timezone.now()
+
+        # Получаем все подписки, которые еще не истекли по оригинальной дате
+        subscriptions = list(
+            self.subscriptions.filter(expires_at__gt=now).order_by("created_at")
+        )
+
+        result = []
+
+        if not subscriptions:
+            return result
+
+        # Если есть несколько подписок, корректируем их даты окончания для вычисления
+        if len(subscriptions) > 1:
+            # Сортируем по дате создания
+            subscriptions.sort(key=lambda s: s.created_at)
+
+            for i in range(len(subscriptions)):
+                sub = subscriptions[i]
+                adjusted_expires_at = sub.expires_at
+
+                # Проверяем все последующие подписки
+                for j in range(i + 1, len(subscriptions)):
+                    next_sub = subscriptions[j]
+
+                    # Если следующая подписка началась до окончания текущей
+                    if next_sub.created_at < sub.expires_at:
+                        # Сохраняем сколько дней осталось у текущей подписки на момент начала следующей
+                        days_remaining_at_start = (
+                            sub.expires_at - next_sub.created_at
+                        ).days
+
+                        # Если следующая подписка уже закончилась
+                        if next_sub.expires_at <= now:
+                            # Старая подписка должна продлиться на дни, которые оставались когда началась новая
+                            adjusted_expires_at = max(
+                                adjusted_expires_at,
+                                next_sub.expires_at
+                                + timedelta(days=days_remaining_at_start),
+                            )
+                        # Если следующая подписка еще действует, но старая уже закончилась
+                        elif sub.expires_at <= now < next_sub.expires_at:
+                            # Продлеваем старую до окончания новой + оставшиеся дни
+                            adjusted_expires_at = (
+                                next_sub.expires_at
+                                + timedelta(days=days_remaining_at_start)
+                            )
+
+                result.append(
+                    {
+                        "subscription": sub,
+                        "adjusted_expires_at": adjusted_expires_at,
+                    }
+                )
+        else:
+            # Если подписка одна, возвращаем как есть
+            result.append(
+                {
+                    "subscription": subscriptions[0],
+                    "adjusted_expires_at": subscriptions[0].expires_at,
+                }
+            )
+
+        return result
+
+    def get_effective_subscription(self) -> "UserSubscription | None":
+        """
+        Возвращает эффективную подписку пользователя.
+        Это подписка, которая должна использоваться для определения прав пользователя.
+        """
+        active_subscriptions_data = self.get_active_subscriptions()
+        if not active_subscriptions_data:
+            return None
+
+        return max(
+            active_subscriptions_data,
+            key=lambda d: d["subscription"].created_at,
+        )["subscription"]
+
+    def get_subscription_for_tariff(
+        self, tariff: "Tariff"
+    ) -> "UserSubscription | None":
+        """Возвращает активную подписку на указанный тариф"""
+        return (
+            self.subscriptions.filter(
+                tariff=tariff,
+                status=UserSubscription.STATUS_ACTIVE,
+                expires_at__gt=timezone.now(),
+            )
+            .order_by("-created_at")
+            .first()
+        )
 
     def __str__(self):
         return f"{self.tg_user_id} {self.username or self.first_name}"
@@ -361,13 +462,10 @@ class UserSubscription(models.Model):
 
     STATUS_ACTIVE = "active"
     STATUS_EXPIRED = "expired"
-    STATUS_CANCELLED = "cancelled"
-    STATUS_UNPAID = "unpaid"
+
     STATUS_CHOICES = [
         (STATUS_ACTIVE, "Активна"),
         (STATUS_EXPIRED, "Истекла"),
-        (STATUS_CANCELLED, "Отменена"),
-        (STATUS_UNPAID, "Неоплачена"),
     ]
 
     user = models.ForeignKey(
@@ -392,20 +490,7 @@ class UserSubscription(models.Model):
         verbose_name="Дата начала подписки", auto_now_add=True
     )
     expires_at = models.DateTimeField(verbose_name="Дата окончания подписки")
-    robokassa_invoice_id = models.PositiveIntegerField(
-        unique=True,
-        verbose_name="ID инвойса Robokassa",
-        help_text="Уникальный идентификатор инвойса в системе Robokassa (1-2147483647)",
-    )
-    previous_subscription = models.ForeignKey(
-        "self",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="recurring_subscriptions",
-        verbose_name="Предыдущая подписка",
-        help_text="Ссылка на предыдущую подписку для рекуррентных платежей",
-    )
+
     is_recurring_enabled = models.BooleanField(
         default=True,
         verbose_name="Автопродление включено",
@@ -453,3 +538,116 @@ class UserSubscription(models.Model):
                 days=self.tariff.duration_days
             )
         super().save(*args, **kwargs)
+
+
+class Payment(models.Model):
+    """Платеж пользователя"""
+
+    STATUS_PENDING = "pending"
+    STATUS_SUCCESS = "success"
+    STATUS_FAILED = "failed"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Ожидает оплаты"),
+        (STATUS_SUCCESS, "Успешно оплачен"),
+        (STATUS_FAILED, "Ошибка оплаты"),
+        (STATUS_CANCELLED, "Отменен"),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="payments",
+        verbose_name="Пользователь",
+    )
+    tariff = models.ForeignKey(
+        Tariff,
+        on_delete=models.CASCADE,
+        related_name="payments",
+        verbose_name="Тариф",
+    )
+    subscription = models.ForeignKey(
+        UserSubscription,
+        on_delete=models.CASCADE,
+        related_name="payments",
+        null=True,
+        blank=True,
+        verbose_name="Подписка",
+        help_text="Подписка, созданная или продленная этим платежом",
+    )
+    previous_payment = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recurring_payments",
+        verbose_name="Предыдущий платеж",
+        help_text="Ссылка на предыдущий платеж для рекуррентных платежей",
+    )
+    robokassa_invoice_id = models.BigIntegerField(
+        unique=True,
+        db_index=True,
+        verbose_name="ID инвойса Robokassa",
+        help_text="Уникальный идентификатор инвойса в системе Robokassa",
+    )
+    amount = models.PositiveIntegerField(
+        verbose_name="Сумма платежа",
+        help_text="Сумма платежа в рублях",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        verbose_name="Статус платежа",
+        db_index=True,
+    )
+    message_id = models.BigIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="ID сообщения Telegram",
+        help_text="ID сообщения для редактирования после оплаты",
+    )
+    error_message = models.TextField(
+        null=True,
+        blank=True,
+        verbose_name="Сообщение об ошибке",
+        help_text="Текст ошибки, если платеж не удался",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Дата создания",
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Дата обновления",
+    )
+    processed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Дата обработки",
+        help_text="Дата успешной обработки платежа",
+    )
+
+    class Meta:
+        verbose_name = "Платеж"
+        verbose_name_plural = "Платежи"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "status"]),
+            models.Index(fields=["robokassa_invoice_id"]),
+            models.Index(fields=["status", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Платеж #{self.robokassa_invoice_id} - {self.user} - {self.get_status_display()}"
+
+    @property
+    def is_successful(self):
+        """Успешно ли выполнен платеж"""
+        return self.status == self.STATUS_SUCCESS
+
+    @property
+    def is_failed(self):
+        """Неудачен ли платеж"""
+        return self.status == self.STATUS_FAILED

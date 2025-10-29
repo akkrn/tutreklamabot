@@ -8,6 +8,7 @@ import structlog
 from core.redis_manager import redis_manager
 from userbot.redis_messages import (
     NewAdMessage,
+    PaymentNotificationMessage,
     SubscribeChannelsMessage,
     SubscribeResponseMessage,
     deserialize_message,
@@ -21,6 +22,7 @@ class EventType(Enum):
     SUBSCRIBE_CHANNELS = "subscribe_channels"
     SUBSCRIBE_RESPONSE = "subscribe_response"
     NEW_AD_MESSAGE = "new_ad_message"
+    PAYMENT_NOTIFICATION = "payment_notification"
 
 
 @dataclass
@@ -108,6 +110,12 @@ class EventManager:
                 message = deserialize_message(data, NewAdMessage)
                 if message:
                     await self._call_handlers(EventType.NEW_AD_MESSAGE, message)
+            elif '"payment_notification"' in data:
+                message = deserialize_message(data, PaymentNotificationMessage)
+                if message:
+                    await self._call_handlers(
+                        EventType.PAYMENT_NOTIFICATION, message
+                    )
         except Exception as e:
             logger.error(f"Ошибка обработки сообщения: {e}")
 

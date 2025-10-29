@@ -31,17 +31,11 @@ def generate_payment_url_direct(
     Используется для формирования клавиатуры.
     """
     timestamp = int(timezone.now().timestamp())
-    # Ограничиваем inv_id до диапазона PositiveIntegerField (1-2147483647)
-    # Используем более компактную формулу
     inv_id = (
-        (user.tg_user_id % 100000) * 10000
-        + (tariff.id % 1000) * 10
-        + (timestamp % 10)
+        (user.tg_user_id % 1000000) * 1000000
+        + (tariff.id % 10000) * 100
+        + (timestamp % 100)
     )
-    # Дополнительно ограничиваем до максимального значения
-    inv_id = inv_id % 2147483647
-    if inv_id == 0:
-        inv_id = 1  # PositiveIntegerField не допускает 0
 
     # Создаем клиент Robokassa
     client = get_robokassa_client()
@@ -53,6 +47,13 @@ def generate_payment_url_direct(
         user_id=user.tg_user_id,
         tariff_id=tariff.id,
         message_id=message_id,
+    )
+
+    logger.info(
+        "Сгенерирован URL для оплаты",
+        user_id=user.tg_user_id,
+        tariff_id=tariff.id,
+        inv_id=inv_id,
     )
 
     return result.url
@@ -80,32 +81,11 @@ def check_signature_result(
 
 
 def process_payment_result(
-    inv_id: str, out_sum: str, signature: str, **kwargs
+    inv_id: int, out_sum: str, signature: str, **kwargs
 ) -> tuple[bool, str]:
     """Обработка результата платежа от Robokassa.
-    Создает или продлевает подписку на основе inv_id.
-    """
-    # Конвертируем inv_id в int и ограничиваем до диапазона PositiveIntegerField
-    try:
-        inv_id_int = int(inv_id)
-        # Ограничиваем до максимального значения PositiveIntegerField (2147483647)
-        MAX_INVOICE_ID = 2147483647
-        if inv_id_int > MAX_INVOICE_ID:
-            inv_id_int = inv_id_int % MAX_INVOICE_ID
-            if inv_id_int == 0:
-                inv_id_int = 1  # PositiveIntegerField не допускает 0
-        elif inv_id_int < 1:
-            inv_id_int = abs(inv_id_int) % MAX_INVOICE_ID
-            if inv_id_int == 0:
-                inv_id_int = 1
-    except ValueError:
-        logger.error(
-            "Некорректный формат inv_id",
-            inv_id=inv_id,
-        )
-        return False, "invalid inv_id"
+    Создает или продлевает подписку."""
 
-    # Проверяем подпись через SDK
     if not check_signature_result(inv_id, out_sum, signature, **kwargs):
         logger.error(
             "Некорректная подпись платежа",
@@ -117,48 +97,21 @@ def process_payment_result(
     user_id = kwargs.get("shp_user_id")
     tariff_id = kwargs.get("shp_tariff_id")
 
-    if not user_id or not tariff_id:
-        subscription = UserSubscription.objects.filter(
-            robokassa_invoice_id=inv_id_int
-        ).first()
-
-        if not subscription:
-            logger.error(
-                "Подписка не найдена",
-                inv_id=inv_id,
-            )
-            return False, "subscription not found"
-
-        if subscription.status == UserSubscription.STATUS_ACTIVE:
-            logger.info(
-                "Подписка уже была обработана",
-                inv_id=inv_id,
-            )
-            return True, f"OK{inv_id}"
-
-        subscription.status = UserSubscription.STATUS_ACTIVE
-        subscription.started_at = timezone.now()
-        subscription.expires_at = timezone.now() + timedelta(
-            days=subscription.tariff.duration_days
-        )
-        subscription.save()
-
-        logger.info(
-            "Подписка активирована",
+    try:
+        user = User.objects.get(tg_user_id=user_id)
+        tariff = Tariff.objects.get(id=tariff_id)
+    except (User.DoesNotExist, Tariff.DoesNotExist) as e:
+        logger.error(
+            "Пользователь или тариф не найдены",
             inv_id=inv_id,
-            user_id=subscription.user.tg_user_id,
-            tariff_id=subscription.tariff.id,
-            expires_at=subscription.expires_at,
+            user_id=user_id,
+            tariff_id=tariff_id,
+            error=str(e),
         )
+        return False, "user or tariff not found"
 
-        return True, f"OK{inv_id}"
-
-    user = User.objects.get(tg_user_id=user_id)
-    tariff = Tariff.objects.get(id=tariff_id)
-
-    active_subscription = UserSubscription.objects.filter(
-        user=user, tariff=tariff, status=UserSubscription.STATUS_ACTIVE
-    ).first()
+    # Ищем активную подписку на тот же тариф
+    active_subscription = user.get_subscription_for_tariff(tariff)
 
     if active_subscription:
         active_subscription.expires_at += timedelta(days=tariff.duration_days)
@@ -170,6 +123,7 @@ def process_payment_result(
             "Подписка продлена",
             user_id=user.tg_user_id,
             tariff_id=tariff.id,
+            subscription_id=active_subscription.id,
             expires_at=active_subscription.expires_at,
         )
 
@@ -180,7 +134,6 @@ def process_payment_result(
             tariff=tariff,
             status=UserSubscription.STATUS_ACTIVE,
             expires_at=timezone.now() + timedelta(days=tariff.duration_days),
-            robokassa_invoice_id=inv_id_int,
             is_recurring_enabled=True,
         )
 
@@ -189,7 +142,6 @@ def process_payment_result(
             user_id=user.tg_user_id,
             tariff_id=tariff.id,
             subscription_id=subscription.id,
-            inv_id=inv_id,
             expires_at=subscription.expires_at,
         )
 
