@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_celery_beat",
     "userbot",
     "bot",
 ]
@@ -114,3 +115,18 @@ ROBOKASSA_ALLOWED_IPS = [
     "185.59.216.65",
     "185.59.217.65",
 ]
+
+CELERY_BROKER_URL = (
+    f"redis://{os.getenv('BOT_REDIS_HOST', 'localhost')}:{os.getenv('BOT_REDIS_PORT', '6379')}/"
+    f"{os.getenv('BOT_REDIS_DB', '0')}"
+)
+
+CELERY_TASK_ALWAYS_EAGER = False
+CELERY_TIMEZONE = "Europe/Moscow"
+CELERY_ENABLE_UTC = True
+
+CELERY_WORKER_CONCURRENCY = 1
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 50
+CELERY_TASK_IGNORE_RESULT = True
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"

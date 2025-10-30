@@ -64,6 +64,36 @@ services:
     networks:
       - tutreklama_network
 
+  # Celery worker
+  celery-worker:
+    env_file: .env
+    build: .
+    mem_limit: 1g
+    command: >
+      sh -c "celery -A core worker -l info -c 1 --max-tasks-per-child=50 --prefetch-multiplier=1 --pool=solo"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tutreklama_network
+
+  # Celery beat scheduler
+  celery-beat:
+    env_file: .env
+    build: .
+    mem_limit: 512m
+    command: >
+      sh -c "celery -A core beat -l info"
+    depends_on:
+      web:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - tutreklama_network
+
   # Telegram бот
   bot:
     env_file: .env
