@@ -85,7 +85,7 @@ class PaymentNotificationHandler:
                 )
 
                 keyboard = add_channels_with_menu_kb()
-                file_name = "payment_success.jpg"
+                file_name = "success_payment.jpg"
             else:
                 error_text = (
                     notification.error_message

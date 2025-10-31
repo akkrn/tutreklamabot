@@ -212,7 +212,12 @@ async def send_file_message(
 
     if not file_path.exists():
         logger.error(f"Файл изображения не найден: {file_path}")
-        return await message.answer(caption, reply_markup=keyboard)
+        return await bot.send_message(
+            chat_id=message.chat.id,
+            text=caption,
+            reply_markup=keyboard,
+            parse_mode=parse_mode,
+        )
 
     media_type = get_media_type(str(file_path))
 
@@ -289,7 +294,12 @@ async def send_file_message(
 
         except Exception as e:
             logger.error(f"Ошибка при отправке файла {file_name}: {e}")
-            return await message.answer(caption, reply_markup=keyboard)
+            return await bot.send_message(
+                chat_id=message.chat.id,
+                text=caption,
+                reply_markup=keyboard,
+                parse_mode=parse_mode,
+            )
 
 
 async def generate_digest_text_paginated(
