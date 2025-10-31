@@ -81,11 +81,12 @@ def check_signature_result(
 
 
 def process_payment_result(
-    inv_id: int, out_sum: str, signature: str, **kwargs
+    inv_id: int, out_sum: int, signature: str, **kwargs
 ) -> tuple[bool, str]:
     """Обработка результата платежа от Robokassa.
     Создает или продлевает подписку."""
 
+    # Преобразуем inv_id в строку для проверки подписи
     if not check_signature_result(inv_id, out_sum, signature, **kwargs):
         logger.error(
             "Некорректная подпись платежа",
@@ -153,7 +154,6 @@ async def create_or_extend_subscription(
 ) -> UserSubscription:
     """
     Создание или продление подписки.
-    Включает robokassa_invoice_id для отслеживания.
     """
 
     # Проверяем, есть ли активная подписка на этот тариф
@@ -192,7 +192,6 @@ async def create_or_extend_subscription(
                 status=UserSubscription.STATUS_ACTIVE,
                 expires_at=timezone.now()
                 + timedelta(days=tariff.duration_days),
-                robokassa_invoice_id=inv_id,
                 is_recurring_enabled=True,
             )
 
