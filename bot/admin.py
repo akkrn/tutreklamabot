@@ -13,6 +13,7 @@ from bot.models import (
     ChannelNews,
     ChannelSubscription,
     ChannelUser,
+    Payment,
     Tariff,
     TextTemplate,
     User,
@@ -615,7 +616,6 @@ class UserSubscriptionAdmin(admin.ModelAdmin):
         "user__first_name",
         "user__username",
         "tariff__name",
-        "robokassa_invoice_id",
     ]
     readonly_fields = [
         "started_at",
@@ -636,15 +636,8 @@ class UserSubscriptionAdmin(admin.ModelAdmin):
             {"fields": ("started_at", "expires_at", "days_remaining")},
         ),
         (
-            "Robokassa",
-            {
-                "fields": (
-                    "robokassa_invoice_id",
-                    "previous_subscription",
-                    "is_recurring_enabled",
-                ),
-                "classes": ("collapse",),
-            },
+            "Автопродление",
+            {"fields": ("is_recurring_enabled",)},
         ),
         (
             "Статус",
@@ -668,3 +661,98 @@ class UserSubscriptionAdmin(admin.ModelAdmin):
 
     is_active.short_description = "Активна"
     is_active.boolean = True
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = [
+        "robokassa_invoice_id",
+        "user",
+        "tariff",
+        "amount",
+        "status",
+        "subscription",
+        "created_at",
+        "processed_at",
+        "is_successful",
+    ]
+    list_filter = [
+        "status",
+        "tariff",
+        "created_at",
+        "processed_at",
+    ]
+    search_fields = [
+        "robokassa_invoice_id",
+        "user__first_name",
+        "user__username",
+        "user__tg_user_id",
+        "tariff__name",
+    ]
+    readonly_fields = [
+        "robokassa_invoice_id",
+        "created_at",
+        "updated_at",
+        "processed_at",
+        "is_successful",
+        "is_failed",
+    ]
+    date_hierarchy = "created_at"
+
+    fieldsets = (
+        (
+            "Основная информация",
+            {
+                "fields": (
+                    "user",
+                    "tariff",
+                    "subscription",
+                    "status",
+                    "amount",
+                )
+            },
+        ),
+        (
+            "Robokassa",
+            {
+                "fields": ("robokassa_invoice_id", "previous_payment"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Telegram",
+            {
+                "fields": ("message_id",),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Ошибки",
+            {
+                "fields": ("error_message",),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Статусы",
+            {"fields": ("is_successful", "is_failed")},
+        ),
+        (
+            "Даты",
+            {"fields": ("created_at", "updated_at", "processed_at")},
+        ),
+    )
+
+    def is_successful(self, obj):
+        """Успешно ли выполнен платеж"""
+        return obj.is_successful
+
+    is_successful.short_description = "Успешно"
+    is_successful.boolean = True
+
+    def is_failed(self, obj):
+        """Неудачен ли платеж"""
+        return obj.is_failed
+
+    is_failed.short_description = "Неудачно"
+    is_failed.boolean = True
