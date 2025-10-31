@@ -1,6 +1,6 @@
 """Обработчик уведомлений о платежах из Redis"""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import structlog
@@ -10,7 +10,6 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Chat, Message
 from aiogram.types import User as TgUser
 from django.conf import settings
-from django.utils import timezone
 
 from bot.constants import MEDIA_FILES_PATH
 from bot.handlers.helpers import send_file_message
