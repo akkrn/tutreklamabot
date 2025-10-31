@@ -79,7 +79,7 @@ class PaymentNotificationHandler:
         try:
             if notification.success:
                 success_text = (
-                    f"✅ <b>Успешная оплата!</b> ✨\n\n"
+                    f"<b>Успешная оплата!</b> ✨\n"
                     f"Следующее списание через {notification.tariff_duration_days} дней — {notification.tariff_price}\n\n"
                     f"Каналов добавлено: {notification.channels_count}/{notification.channels_limit}"
                 )
@@ -90,7 +90,7 @@ class PaymentNotificationHandler:
                 error_text = (
                     notification.error_message
                     if notification.error_message
-                    else "❌ Произошла ошибка, попробуйте снова"
+                    else "<b>❌ Произошла ошибка, попробуйте снова</b>"
                 )
                 success_text = error_text
                 keyboard = payment_kb()

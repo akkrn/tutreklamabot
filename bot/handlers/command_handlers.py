@@ -60,7 +60,7 @@ async def check_channel_limit(
         if remaining_slots <= 0:
             return (
                 False,
-                f"<b>Достигнут лимит запросов в вашем тарифе.</b> Пожалуйста, смените тариф.\n\n<b>Каналов добавлено:</b> {current_channels_count}/{channels_limit}",
+                f"<b>Достигнут лимит запросов в вашем тарифе.</b> Пожалуйста, смените тариф.\n\nКаналов добавлено: {current_channels_count}/{channels_limit}",
             )
         else:
             return (
@@ -270,7 +270,7 @@ async def handle_change_tariff(callback: CallbackQuery, state: FSMContext):
 async def handle_cancel_reccurent(callback: CallbackQuery, state: FSMContext):
     """Хендлер кнопки 'Отменить подписку'"""
     cancel_reccurent_text = (
-        "❤️ <b>Внимание!</b> При отключении — ваш тариф сохранится до конца оплаченного срока.\n\n"
+        "❤️ <b>Внимание!</b> При отключении — тариф сохранится до конца оплаченного периода.\n\n"
         "Отключаем?"
     )
 
@@ -486,7 +486,7 @@ async def process_channel_subscription(
         if len(successful_channels) == 1 and len(failed_channels) == 0:
             caption = f"""Канал <b>{successful_channels[0]}</b> успешно добавлен!
 
-<b>Каналов добавлено:</b> {channels_count}/{channels_limit}"""
+Каналов добавлено: {channels_count}/{channels_limit}"""
             await send_file_message(
                 message=message,
                 file_name="one_add.jpg",
@@ -497,7 +497,7 @@ async def process_channel_subscription(
         elif len(successful_channels) > 1 and len(failed_channels) == 0:
             caption = f"""<b>Чудесно!</b> ✨ Теперь вы будете получать уведомления о рекламе из этих каналов.
 
-<b>Каналов добавлено:</b> {channels_count}/{channels_limit}"""
+Каналов добавлено: {channels_count}/{channels_limit}"""
             await send_file_message(
                 message=message,
                 file_name="many_add.jpg",
@@ -508,8 +508,7 @@ async def process_channel_subscription(
         elif len(successful_channels) > 0:
             caption = f"""<b>Где-то допущена ошибка.</b>
 
-<b>Каналов добавлено:</b> {channels_count}/{channels_limit}, кроме:
-\n{'\n'.join(failed_channels)}"""
+Каналов добавлено: {channels_count}/{channels_limit}, кроме:\n{'\n'.join(failed_channels)}"""
             await send_file_message(
                 message=message,
                 file_name="almost.jpg",
