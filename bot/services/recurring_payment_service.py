@@ -93,16 +93,46 @@ async def create_recurring_payment(
             )
             response.raise_for_status()
 
+            # Получаем текст ответа
+            response_text = response.text.strip()
+
             logger.info(
-                "Рекуррентный платеж создан в Robokassa",
+                "Ответ от Robokassa на рекуррентный платеж",
                 user_id=user.tg_user_id,
                 subscription_id=subscription.id,
                 tariff_id=tariff.id,
                 invoice_id=new_invoice_id,
                 previous_invoice_id=previous_payment.robokassa_invoice_id,
                 response_status=response.status_code,
-                response=response,
+                response_text=response_text,
             )
+
+            # Проверяем успешность ответа
+            # Robokassa возвращает "OK{InvId}" в случае успеха
+            expected_success_response = f"OK{new_invoice_id}"
+
+            def update_payment_status():
+                if response_text == expected_success_response:
+                    payment.status = Payment.STATUS_SUCCESS
+                    payment.save()
+                    logger.info(
+                        "Рекуррентный платеж успешно создан и подтвержден",
+                        payment_id=payment.id,
+                        invoice_id=new_invoice_id,
+                    )
+                else:
+                    payment.status = Payment.STATUS_FAILED
+                    payment.error_message = f"Ошибка Robokassa: {response_text}"
+                    payment.save()
+                    logger.error(
+                        "Рекуррентный платеж не прошел",
+                        payment_id=payment.id,
+                        invoice_id=new_invoice_id,
+                        response_text=response_text,
+                        expected=expected_success_response,
+                    )
+
+            await sync_to_async(update_payment_status)()
 
         return payment
 
