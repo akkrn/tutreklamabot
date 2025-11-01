@@ -1,8 +1,11 @@
 """Сервис для работы с рекуррентными платежами"""
 
+import hashlib
+
 import httpx
 import structlog
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.utils import timezone
 
 from bot.models import Payment, Tariff, User, UserSubscription
@@ -54,14 +57,24 @@ async def create_recurring_payment(
     # Получаем параметры из объекта params
     params = result.params
 
-    # Формируем данные для POST запроса из параметров SDK
+    # SDK генерирует подпись без merchant_login для рекуррентных платежей
+    # Пересчитываем подпись вручную по формуле: MerchantLogin:OutSum:InvId:Password1
+    merchant_login = params.merchant_login
+    out_sum_str = str(params.out_sum)
+    inv_id_str = str(params.inv_id)
+    password = settings.ROBOKASSA_PASSWORD_1
+
+    signature_string = f"{merchant_login}:{out_sum_str}:{inv_id_str}:{password}"
+    signature_value = hashlib.md5(signature_string.encode("utf-8")).hexdigest()
+
+    # Формируем данные для POST запроса
     post_data = {
-        "MerchantLogin": params.merchant_login,
-        "InvoiceID": str(params.inv_id),
+        "MerchantLogin": merchant_login,
+        "InvoiceID": inv_id_str,
         "PreviousInvoiceID": str(params.previous_inv_id),
         "Description": f"Автопродление подписки {tariff.name}",
-        "SignatureValue": params.signature_value,
-        "OutSum": str(params.out_sum),
+        "SignatureValue": signature_value,
+        "OutSum": out_sum_str,
     }
 
     # Добавляем IsTest если это тестовый режим
@@ -102,9 +115,6 @@ async def create_recurring_payment(
                 subscription_id=subscription.id,
                 tariff_id=tariff.id,
                 invoice_id=new_invoice_id,
-                previous_invoice_id=previous_payment.robokassa_invoice_id,
-                response_status=response.status_code,
-                response_text=response_text,
             )
 
             # Проверяем успешность ответа
