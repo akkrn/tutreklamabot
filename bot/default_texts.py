@@ -1,6 +1,6 @@
 DEFAULT_TEXTS = {
     # Кнопки
-    "add_channels_btn": "Добавить канал",
+    "add_channels_btn": "Добавить каналы",
     "my_channels_btn": "Мои каналы",
     "digest_btn": "Дайджест",
     "support_btn": "Помощь",
