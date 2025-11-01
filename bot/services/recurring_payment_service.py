@@ -101,6 +101,7 @@ async def create_recurring_payment(
                 invoice_id=new_invoice_id,
                 previous_invoice_id=previous_payment.robokassa_invoice_id,
                 response_status=response.status_code,
+                response=response,
             )
 
         return payment
