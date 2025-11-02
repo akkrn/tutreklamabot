@@ -146,19 +146,19 @@ def process_payment_result(
         )
         return False, "user or tariff not found", None
 
-    active_subscription = user.get_subscription_for_tariff(tariff)
+    subscription = user.get_subscription_for_tariff(tariff)
 
-    if active_subscription:
-        active_subscription.expires_at += timedelta(days=tariff.duration_days)
-        active_subscription.status = UserSubscription.STATUS_ACTIVE
-        active_subscription.save()
+    if subscription:
+        subscription.expires_at += timedelta(days=tariff.duration_days)
+        subscription.status = UserSubscription.STATUS_ACTIVE
+        subscription.save()
 
         logger.info(
             "Подписка продлена",
             user_id=user.tg_user_id,
             tariff_id=tariff.id,
-            subscription_id=active_subscription.id,
-            expires_at=active_subscription.expires_at,
+            subscription_id=subscription.id,
+            expires_at=subscription.expires_at,
         )
     else:
         subscription = UserSubscription.objects.create(
