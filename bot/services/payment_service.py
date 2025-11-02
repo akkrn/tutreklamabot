@@ -6,9 +6,51 @@ from django.conf import settings
 from django.utils import timezone
 from robokassa import Robokassa
 
-from bot.models import Tariff, User, UserSubscription
+from bot.models import Payment, Tariff, User, UserSubscription
 
 logger = structlog.getLogger(__name__)
+
+
+def generate_invoice_id(
+    user: User, tariff: Tariff, timestamp_offset: int = 0
+) -> int:
+    """
+    Генерирует уникальный invoice_id для платежа.
+
+    Формула: (user.tg_user_id % 1000000) * 1000000 + (tariff.id % 10000) * 100 + (timestamp % 100)
+    """
+    timestamp = int(timezone.now().timestamp()) + timestamp_offset
+    return (
+        (user.tg_user_id % 1000000) * 1000000
+        + (tariff.id % 10000) * 100
+        + (timestamp % 100)
+    )
+
+
+async def generate_unique_invoice_id(
+    user: User, tariff: Tariff, max_retries: int = 10
+) -> int:
+    """
+    Генерирует уникальный invoice_id с проверкой на существование в БД.
+
+    Если invoice_id уже существует, генерирует новый с увеличенным timestamp_offset.
+    """
+    for offset in range(max_retries):
+        invoice_id = generate_invoice_id(user, tariff, timestamp_offset=offset)
+
+        def check_exists():
+            return Payment.objects.filter(
+                robokassa_invoice_id=invoice_id
+            ).exists()
+
+        exists = await sync_to_async(check_exists)()
+
+        if not exists:
+            return invoice_id
+
+    raise ValueError(
+        f"Не удалось сгенерировать уникальный invoice_id после {max_retries} попыток"
+    )
 
 
 def get_robokassa_client() -> Robokassa:
@@ -30,14 +72,8 @@ def generate_payment_url_direct(
     Генерация URL для оплаты без создания записи в БД.
     Используется для формирования клавиатуры.
     """
-    timestamp = int(timezone.now().timestamp())
-    inv_id = (
-        (user.tg_user_id % 1000000) * 1000000
-        + (tariff.id % 10000) * 100
-        + (timestamp % 100)
-    )
+    inv_id = generate_invoice_id(user, tariff)
 
-    # Создаем клиент Robokassa
     client = get_robokassa_client()
     result = client.generate_open_payment_link(
         out_sum=tariff.price,
@@ -86,7 +122,6 @@ def process_payment_result(
     """Обработка результата платежа от Robokassa.
     Создает или продлевает подписку."""
 
-    # Преобразуем inv_id в строку для проверки подписи
     if not check_signature_result(inv_id, out_sum, signature, **kwargs):
         logger.error(
             "Некорректная подпись платежа",
@@ -111,13 +146,11 @@ def process_payment_result(
         )
         return False, "user or tariff not found"
 
-    # Ищем активную подписку на тот же тариф
     active_subscription = user.get_subscription_for_tariff(tariff)
 
     if active_subscription:
         active_subscription.expires_at += timedelta(days=tariff.duration_days)
         active_subscription.status = UserSubscription.STATUS_ACTIVE
-        active_subscription.is_recurring_enabled = True
         active_subscription.save()
 
         logger.info(
@@ -146,7 +179,7 @@ def process_payment_result(
             expires_at=subscription.expires_at,
         )
 
-        return True, f"OK{inv_id}"
+        return True, f"OK{inv_id}", subscription
 
 
 async def create_or_extend_subscription(
@@ -184,7 +217,7 @@ async def create_or_extend_subscription(
         )
         return active_subscription
     else:
-        # Создаем новую подписку
+
         def create_subscription():
             return UserSubscription.objects.create(
                 user=user,

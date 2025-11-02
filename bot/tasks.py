@@ -1,5 +1,3 @@
-"""Celery задачи для бота"""
-
 import asyncio
 from datetime import timedelta
 
@@ -121,15 +119,28 @@ async def process_subscription_recurring_payment(
         if not last_payment:
             return False, None
 
-        # Проверяем, есть ли уже созданный рекуррентный платеж на основе этого
+        master_payment = (
+            Payment.objects.filter(
+                user=user,
+                tariff=tariff,
+                is_master=True,
+                status=Payment.STATUS_SUCCESS,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+
+        if not master_payment:
+            return False, None
+
         existing = Payment.objects.filter(
             user=user,
             tariff=tariff,
-            previous_payment=last_payment,
+            previous_payment=master_payment,
             status__in=[Payment.STATUS_PENDING, Payment.STATUS_SUCCESS],
         ).exists()
 
-        return existing, last_payment
+        return existing, master_payment
 
     exists, last_payment = await sync_to_async(check_existing_payment)()
 
@@ -150,7 +161,6 @@ async def process_subscription_recurring_payment(
         payment = await create_recurring_payment(
             user=user,
             tariff=tariff,
-            previous_payment=last_payment,
             subscription=subscription,
         )
 
