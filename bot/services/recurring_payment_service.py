@@ -1,11 +1,8 @@
 """Сервис для работы с рекуррентными платежами"""
 
-import hashlib
-
 import httpx
 import structlog
 from asgiref.sync import sync_to_async
-from django.conf import settings
 from django.utils import timezone
 
 from bot.models import Payment, Tariff, User, UserSubscription
@@ -48,38 +45,30 @@ async def create_recurring_payment(
         )
 
     client = get_robokassa_client()
-    result = client.generate_subscription_link(
+    result = client.generate_open_payment_link(
+        out_sum=tariff.price,
         inv_id=new_invoice_id,
-        previous_inv_id=previous_payment.robokassa_invoice_id,
-        out_sum=int(tariff.price),
+        description=f"Автопродление подписки {tariff.name}",
+        recurring=True,
+        user_id=user.tg_user_id,
+        tariff_id=tariff.id,
     )
 
     # Получаем параметры из объекта params
     params = result.params
 
-    # SDK генерирует подпись без merchant_login для рекуррентных платежей
-    # Пересчитываем подпись вручную по формуле: MerchantLogin:OutSum:InvId:Password1
-    merchant_login = params.merchant_login
-    out_sum_str = str(params.out_sum)
-    inv_id_str = str(params.inv_id)
-    password = settings.ROBOKASSA_PASSWORD_1
-
-    signature_string = f"{merchant_login}:{out_sum_str}:{inv_id_str}:{password}"
-    signature_value = hashlib.md5(signature_string.encode("utf-8")).hexdigest()
-
-    # Формируем данные для POST запроса
+    # Формируем данные для POST запроса из параметров SDK
     post_data = {
-        "MerchantLogin": merchant_login,
-        "InvoiceID": inv_id_str,
-        "PreviousInvoiceID": str(params.previous_inv_id),
-        "Description": f"Автопродление подписки {tariff.name}",
-        "SignatureValue": signature_value,
-        "OutSum": out_sum_str,
+        "MerchantLogin": params.merchant_login,
+        "InvoiceID": str(params.inv_id),
+        "PreviousInvoiceID": str(previous_payment.robokassa_invoice_id),
+        "Description": params.description,
+        "SignatureValue": params.signature_value,
+        "OutSum": str(params.out_sum),
     }
 
-    # Добавляем IsTest если это тестовый режим
-    if params.is_test:
-        post_data["IsTest"] = "1"
+    if params.additional_params:
+        post_data.update(params.additional_params)
 
     # URL для создания рекуррентного платежа в Robokassa
     robokassa_url = "https://auth.robokassa.ru/Merchant/Recurring"
@@ -106,7 +95,6 @@ async def create_recurring_payment(
             )
             response.raise_for_status()
 
-            # Получаем текст ответа
             response_text = response.text.strip()
 
             logger.info(
@@ -123,10 +111,8 @@ async def create_recurring_payment(
 
             def update_payment_status():
                 if response_text == expected_success_response:
-                    payment.status = Payment.STATUS_SUCCESS
-                    payment.save()
                     logger.info(
-                        "Рекуррентный платеж успешно создан и подтвержден",
+                        "Рекуррентный платеж успешно создан",
                         payment_id=payment.id,
                         invoice_id=new_invoice_id,
                     )
