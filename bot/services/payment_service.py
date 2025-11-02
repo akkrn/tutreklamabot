@@ -144,7 +144,7 @@ def process_payment_result(
             tariff_id=tariff_id,
             error=str(e),
         )
-        return False, "user or tariff not found"
+        return False, "user or tariff not found", None
 
     active_subscription = user.get_subscription_for_tariff(tariff)
 
@@ -160,8 +160,6 @@ def process_payment_result(
             subscription_id=active_subscription.id,
             expires_at=active_subscription.expires_at,
         )
-
-        return True, f"OK{inv_id}"
     else:
         subscription = UserSubscription.objects.create(
             user=user,
@@ -179,7 +177,7 @@ def process_payment_result(
             expires_at=subscription.expires_at,
         )
 
-        return True, f"OK{inv_id}", subscription
+    return True, f"OK{inv_id}", subscription
 
 
 async def create_or_extend_subscription(
