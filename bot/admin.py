@@ -672,6 +672,7 @@ class PaymentAdmin(admin.ModelAdmin):
         "amount",
         "status",
         "subscription",
+        "is_master",
         "created_at",
         "processed_at",
         "is_successful",
@@ -679,6 +680,7 @@ class PaymentAdmin(admin.ModelAdmin):
     list_filter = [
         "status",
         "tariff",
+        "is_master",
         "created_at",
         "processed_at",
     ]
@@ -715,7 +717,11 @@ class PaymentAdmin(admin.ModelAdmin):
         (
             "Robokassa",
             {
-                "fields": ("robokassa_invoice_id", "previous_payment"),
+                "fields": (
+                    "robokassa_invoice_id",
+                    "previous_payment",
+                    "is_master",
+                ),
                 "classes": ("collapse",),
             },
         ),

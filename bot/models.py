@@ -628,6 +628,12 @@ class Payment(models.Model):
         verbose_name="Дата обработки",
         help_text="Дата успешной обработки платежа",
     )
+    is_master = models.BooleanField(
+        default=False,
+        verbose_name="Материнский платеж",
+        help_text="Первый платеж в цепочке рекуррентных платежей",
+        db_index=True,
+    )
 
     class Meta:
         verbose_name = "Платеж"
