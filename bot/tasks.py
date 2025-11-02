@@ -106,19 +106,6 @@ async def process_subscription_recurring_payment(
 
     # Проверяем, есть ли уже активный рекуррентный платеж
     def check_existing_payment():
-        last_payment = (
-            Payment.objects.filter(
-                user=user,
-                tariff=tariff,
-                status=Payment.STATUS_SUCCESS,
-            )
-            .order_by("-created_at")
-            .first()
-        )
-
-        if not last_payment:
-            return False, None
-
         master_payment = (
             Payment.objects.filter(
                 user=user,
@@ -129,26 +116,9 @@ async def process_subscription_recurring_payment(
             .order_by("-created_at")
             .first()
         )
+        return master_payment
 
-        if not master_payment:
-            return False, None
-
-        existing = Payment.objects.filter(
-            user=user,
-            tariff=tariff,
-            previous_payment=master_payment,
-            status__in=[Payment.STATUS_PENDING, Payment.STATUS_SUCCESS],
-        ).exists()
-
-        return existing, master_payment
-
-    exists, last_payment = await sync_to_async(check_existing_payment)()
-
-    if exists:
-        return {
-            "success": False,
-            "reason": "Рекуррентный платеж уже создан",
-        }
+    last_payment = await sync_to_async(check_existing_payment)()
 
     if not last_payment:
         return {
@@ -156,7 +126,6 @@ async def process_subscription_recurring_payment(
             "reason": "Нет предыдущего успешного платежа",
         }
 
-    # Создаем новый рекуррентный платеж
     try:
         payment = await create_recurring_payment(
             user=user,
