@@ -4,6 +4,7 @@ from datetime import timedelta
 
 import structlog
 from aiogram import F, Router
+from aiogram.enums import ParseMode
 from aiogram.filters import CommandObject, CommandStart, StateFilter
 from aiogram.filters.command import Command
 from aiogram.fsm.context import FSMContext
@@ -405,23 +406,30 @@ async def process_channel_subscription(
         channel_links=channel_links,
     )
 
+    status_message = None
     try:
         await event_manager.publish_event(
             EventType.SUBSCRIBE_CHANNELS, subscribe_request, "userbot:subscribe"
         )
 
-        response = await event_manager.wait_for_response(request_id, timeout=60)
+        # Отправляем системное сообщение "Добавляю каналы..."
+        status_message = await message.answer(
+            "Добавляю каналы...",
+            parse_mode=ParseMode.HTML,
+        )
 
-        if not response:
-            logger.error("Таймаут ожидания ответа от userbot")
-            await message.answer("Что-то пошло не так. Попробуйте еще раз.")
-            return
+        response = await event_manager.wait_for_response(
+            request_id, timeout=100
+        )
 
-        if not response.success:
-            logger.error(
-                f"Ошибка при обработке каналов: {response.error_message}"
+        if not response or not response.success:
+            await send_file_message(
+                message=status_message,
+                file_name="error.jpg",
+                caption="Что-то пошло не так. Попробуйте еще раз.",
+                keyboard=back_to_menu_kb(),
+                edit_message=True,
             )
-            await message.answer("Что-то пошло не так. Попробуйте еще раз.")
             return
 
         successful_channels = []
@@ -488,10 +496,11 @@ async def process_channel_subscription(
 
 Каналов добавлено: {channels_count}/{channels_limit}"""
             await send_file_message(
-                message=message,
+                message=status_message,
                 file_name="one_add.jpg",
                 caption=caption,
                 keyboard=add_more_channels_kb(),
+                edit_message=True,
             )
             return True
         elif len(successful_channels) > 1 and len(failed_channels) == 0:
@@ -499,10 +508,11 @@ async def process_channel_subscription(
 
 Каналов добавлено: {channels_count}/{channels_limit}"""
             await send_file_message(
-                message=message,
+                message=status_message,
                 file_name="many_add.jpg",
                 caption=caption,
                 keyboard=add_more_channels_kb(),
+                edit_message=True,
             )
             return True
         elif len(successful_channels) > 0:
@@ -510,19 +520,21 @@ async def process_channel_subscription(
 
 Каналов добавлено: {channels_count}/{channels_limit}, кроме:\n{'\n'.join(failed_channels)}"""
             await send_file_message(
-                message=message,
+                message=status_message,
                 file_name="almost.jpg",
                 caption=caption,
                 keyboard=add_more_channels_kb(),
+                edit_message=True,
             )
             return True
         else:
             caption = "<b>Каналы не найдены.</b> Возможно, вы пропустили пробелы между ссылками."
             await send_file_message(
-                message=message,
+                message=status_message,
                 file_name="error.jpg",
                 caption=caption,
                 keyboard=back_to_menu_kb(),
+                edit_message=True,
             )
             return False
 
@@ -530,12 +542,25 @@ async def process_channel_subscription(
         logger.error(
             f"Ошибка при обработке каналов через Redis: {e}", exc_info=True
         )
-        await send_file_message(
-            message=message,
-            file_name="error.jpg",
-            caption="Произошла ошибка при добавлении каналов. Попробуйте еще раз.",
-            keyboard=back_to_menu_kb(),
-        )
+        # Если status_message был создан, редактируем его, иначе отправляем новое
+        try:
+            if status_message:
+                await send_file_message(
+                    message=status_message,
+                    file_name="error.jpg",
+                    caption="Произошла ошибка при добавлении каналов. Попробуйте еще раз.",
+                    keyboard=back_to_menu_kb(),
+                    edit_message=True,
+                )
+            else:
+                await send_file_message(
+                    message=message,
+                    file_name="error.jpg",
+                    caption="Произошла ошибка при добавлении каналов. Попробуйте еще раз.",
+                    keyboard=back_to_menu_kb(),
+                )
+        except Exception:
+            await message.answer("Что-то пошло не так. Попробуйте еще раз.")
         return False
 
 
