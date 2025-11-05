@@ -27,6 +27,7 @@ from bot.health_views import (
     health_ready,
 )
 from bot.views.payment_views import (
+    payment_fail,
     robokassa_result,
 )
 
@@ -37,8 +38,9 @@ urlpatterns = [
     path("health/detailed/", health_detailed, name="health_detailed"),
     path("health/ready/", health_ready, name="health_ready"),
     path("health/live/", health_live, name="health_live"),
-    # Payment webhook
+    # Payment webhooks
     path("robokassa/result/", robokassa_result, name="robokassa_result"),
+    path("robokassa/fail/", payment_fail, name="payment_fail"),
 ]
 
 # Обслуживание статических файлов в продакшене

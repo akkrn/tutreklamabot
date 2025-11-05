@@ -201,6 +201,7 @@ async def create_or_extend_subscription(
             active_subscription.expires_at += timedelta(
                 days=tariff.duration_days
             )
+            active_subscription.is_recurring_enabled = True
             active_subscription.status = UserSubscription.STATUS_ACTIVE
             active_subscription.is_recurring_enabled = True
             active_subscription.save()

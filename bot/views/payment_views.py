@@ -156,7 +156,8 @@ def robokassa_result(request):
     payment.subscription = subscription
     payment.save()
 
-    asyncio.run(_send_payment_notification_via_redis(payment, success=True))
+    if shp_message_id:
+        asyncio.run(_send_payment_notification_via_redis(payment, success=True))
     return HttpResponse(f"OK{inv_id}", content_type="text/plain")
 
 
@@ -229,3 +230,73 @@ async def _send_payment_notification_via_redis(
             payment_id=payment.id,
             exc_info=True,
         )
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def payment_fail(request):
+    """Webhook для обработки fail-запросов от платежной системы."""
+    client_ip = request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[
+        0
+    ] or request.META.get("REMOTE_ADDR", "")
+
+    if not is_ip_allowed(client_ip):
+        logger.warning(
+            "Запрос с неразрешенного IP адреса",
+            ip=client_ip,
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
+        return HttpResponseBadRequest("IP not allowed")
+
+    inv_id = request.POST.get("InvId") or request.POST.get("inv_id")
+    message_id = request.POST.get("shp_message_id")
+
+    if not inv_id:
+        logger.error(
+            "Отсутствует обязательный параметр InvId/inv_id",
+            post_data=dict(request.POST),
+        )
+        return HttpResponseBadRequest("Missing InvId parameter")
+
+    try:
+        inv_id_int = int(inv_id)
+    except (ValueError, TypeError):
+        logger.error(
+            "Некорректный формат InvId",
+            inv_id=inv_id,
+        )
+        return HttpResponseBadRequest("Invalid InvId format")
+
+    logger.info(
+        "Получен fail-запрос для платежа",
+        inv_id=inv_id_int,
+        message_id=message_id,
+    )
+
+    error_message = (
+        request.POST.get("error_message") or "Платеж не был выполнен"
+    )
+
+    if message_id:
+        pass
+    else:
+        # Нет message_id - это рекуррентный платеж, payment уже существует
+        try:
+            payment = Payment.objects.get(robokassa_invoice_id=inv_id_int)
+        except Payment.DoesNotExist:
+            logger.error(
+                "Платеж не найден",
+                inv_id=inv_id_int,
+            )
+            return
+        payment.status = Payment.STATUS_FAILED
+        payment.error_message = error_message
+        payment.save()
+
+        logger.info(
+            "Рекуррентный платеж отмечен как failed",
+            payment_id=payment.id,
+            inv_id=inv_id_int,
+        )
+
+    return
