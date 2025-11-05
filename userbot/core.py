@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Optional
 
 import structlog
@@ -17,6 +18,7 @@ class UserbotCore:
     def __init__(self):
         self.active_userbots: dict[int, TelegramClient] = {}
         self.userbot_tasks: dict[int, asyncio.Task] = {}
+        self.last_activity: dict[int, float] = {}
         self.running = False
 
     async def start(self):
@@ -40,6 +42,7 @@ class UserbotCore:
 
         self.active_userbots.clear()
         self.userbot_tasks.clear()
+        self.last_activity.clear()
         logger.info("UserbotCore остановлен")
 
     async def _load_active_userbots(self):
@@ -67,6 +70,8 @@ class UserbotCore:
             self.active_userbots[userbot.id] = client
             task = asyncio.create_task(self._run_userbot(userbot, client))
             self.userbot_tasks[userbot.id] = task
+
+            self.last_activity[userbot.id] = time.time()
 
             logger.info(f"Юзербот {userbot.name} запущен")
 
@@ -106,11 +111,21 @@ class UserbotCore:
     async def _run_userbot(self, userbot: UserBot, client: TelegramClient):
         """Запускает юзербот и обрабатывает события"""
         logger.info(f"Запускаем юзербот {userbot.name} (ID: {userbot.id})")
+        self.last_activity[userbot.id] = time.time()
+
         try:
             logger.info(
                 f"Юзербот {userbot.name} подключен и слушает сообщения..."
             )
+
+            # Запускаем heartbeat для отслеживания активности
+            heartbeat_task = asyncio.create_task(
+                self._heartbeat_loop(userbot.id, client)
+            )
+
             await client.run_until_disconnected()
+            heartbeat_task.cancel()
+
             logger.error(f"Юзербот {userbot.name} отключился")
         except (AuthKeyUnregisteredError, SessionRevokedError) as e:
             logger.error(f"Сессия юзербота {userbot.name} отозвана: {e}")
@@ -118,6 +133,49 @@ class UserbotCore:
         except Exception as e:
             logger.exception(f"Ошибка в юзерботе {userbot.name}: {e}")
             await self._handle_userbot_error(userbot, str(e))
+        finally:
+            if userbot.id in self.last_activity:
+                del self.last_activity[userbot.id]
+
+    async def _heartbeat_loop(self, userbot_id: int, client: TelegramClient):
+        """Heartbeat для проверки активности соединения"""
+        while True:
+            try:
+                await asyncio.sleep(600)  # Проверка каждые 10 минут
+
+                if not client.is_connected():
+                    logger.warning(
+                        f"Юзербот {userbot_id} не подключен, обновляем активность"
+                    )
+                    # Пробуем переподключиться
+                    try:
+                        await client.connect()
+                        if await client.is_user_authorized():
+                            self.last_activity[userbot_id] = time.time()
+                            logger.info(
+                                f"Юзербот {userbot_id} успешно переподключен"
+                            )
+                        else:
+                            logger.error(
+                                f"Юзербот {userbot_id} не авторизован после переподключения"
+                            )
+                            break
+                    except Exception as e:
+                        logger.error(
+                            f"Ошибка переподключения юзербота {userbot_id}: {e}"
+                        )
+                        break
+                else:
+                    # Соединение активно, обновляем время последней активности
+                    self.last_activity[userbot_id] = time.time()
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(
+                    f"Ошибка в heartbeat для юзербота {userbot_id}: {e}"
+                )
+                await asyncio.sleep(60)
 
     async def _monitor_userbots(self):
         """Мониторит состояние юзерботов"""
@@ -125,13 +183,45 @@ class UserbotCore:
             try:
                 await asyncio.sleep(30)
 
+                current_time = time.time()
+
                 for userbot_id, task in list(self.userbot_tasks.items()):
+                    # Проверяем, завершилась ли задача
                     if task.done():
-                        logger.info(f"Перезапускаем юзербот {userbot_id}")
+                        logger.warning(
+                            f"Задача юзербота {userbot_id} завершена, перезапускаем"
+                        )
                         await self._restart_userbot(userbot_id)
+                        continue
+
+                    # Проверяем соединение
+                    client = self.active_userbots.get(userbot_id)
+                    if client:
+                        if not client.is_connected():
+                            logger.warning(
+                                f"Юзербот {userbot_id} не подключен, перезапускаем"
+                            )
+                            await self._restart_userbot(userbot_id)
+                            continue
+
+                        # Проверяем активность (если нет активности более 5 минут - проблема)
+                        last_activity = self.last_activity.get(
+                            userbot_id, current_time
+                        )
+                        inactivity_time = current_time - last_activity
+
+                        if inactivity_time > 3000:  # 50 минут
+                            logger.warning(
+                                f"Юзербот {userbot_id} неактивен {inactivity_time:.0f} секунд, "
+                                f"перезапускаем"
+                            )
+                            await self._restart_userbot(userbot_id)
+                            continue
 
             except Exception as e:
-                logger.error(f"Ошибка мониторинга юзерботов: {e}")
+                logger.error(
+                    f"Ошибка мониторинга юзерботов: {e}", exc_info=True
+                )
 
     async def _restart_userbot(self, userbot_id: int):
         """Перезапускает юзербот"""
@@ -183,6 +273,8 @@ class UserbotCore:
             del self.active_userbots[userbot.id]
         if userbot.id in self.userbot_tasks:
             del self.userbot_tasks[userbot.id]
+        if userbot.id in self.last_activity:
+            del self.last_activity[userbot.id]
 
     async def _handle_userbot_error(self, userbot: UserBot, error: str):
         """Обрабатывает ошибки юзербота"""

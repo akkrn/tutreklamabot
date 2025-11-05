@@ -1,3 +1,4 @@
+import time
 from typing import TYPE_CHECKING
 
 import structlog
@@ -25,6 +26,10 @@ class MessageHandler:
         async def message_handler(event):
             """Обработчик входящих сообщений"""
             try:
+                # Обновляем время последней активности юзербота
+                if userbot.id in self.userbot_core.last_activity:
+                    self.userbot_core.last_activity[userbot.id] = time.time()
+
                 if not hasattr(event, "message") or not hasattr(
                     event, "get_chat"
                 ):

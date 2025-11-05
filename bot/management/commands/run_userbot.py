@@ -1,4 +1,6 @@
 import asyncio
+import sys
+import time
 
 import structlog
 from django.core.management.base import BaseCommand
@@ -40,12 +42,51 @@ class Command(BaseCommand):
         """Запускает manager в обычном режиме"""
         await userbot_manager.start()
 
-        # Ждем бесконечно
+        start_time = time.time()
+        # 24 часа = 86400 секунд
+        restart_interval = 86400
+
+        logger.info(
+            f"Userbot manager запущен. Автоматическая перезагрузка через {restart_interval/3600:.0f} часов"
+        )
+
+        # Запускаем задачу для автоматической перезагрузки
+        restart_task = asyncio.create_task(
+            self._scheduled_restart(restart_interval)
+        )
+
+        # Ждем бесконечно или до перезагрузки
         try:
             while True:
-                await asyncio.sleep(1)
+                await asyncio.sleep(100)
+
+                # Проверяем время работы (на случай если restart_task не сработает)
+                uptime = time.time() - start_time
+                if uptime >= restart_interval:
+                    logger.info(
+                        f"Достигнут лимит времени работы ({uptime/3600:.1f} часов), "
+                        f"перезагружаем контейнер"
+                    )
+                    restart_task.cancel()
+                    await userbot_manager.stop()
+                    sys.exit(0)
+
         except KeyboardInterrupt:
+            restart_task.cancel()
             await userbot_manager.stop()
+
+    async def _scheduled_restart(self, interval: int):
+        """Запланированная перезагрузка через заданный интервал"""
+        try:
+            await asyncio.sleep(interval)
+            logger.info(
+                f"Сработал таймер перезагрузки ({interval/3600:.0f} часов), "
+                f"перезагружаем контейнер"
+            )
+            await userbot_manager.stop()
+            sys.exit(0)
+        except asyncio.CancelledError:
+            pass
 
     async def _test_connection(self):
         """Тестирует соединение с базой данных"""
