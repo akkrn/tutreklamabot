@@ -100,7 +100,7 @@ async def handle_add_channels(callback: CallbackQuery, state: FSMContext):
     await send_file_message(
         message=callback.message,
         file_name="search.jpg",
-        caption="Отправьте одну или несколько ссылок через пробел и бот начнёт отслеживать рекламные посты в этих каналах.",
+        caption="Отправьте одну или до 10 ссылок через пробел и бот начнёт отслеживать рекламные посты в этих каналах.",
         keyboard=back_to_menu_kb(),
         edit_message=True,
     )
@@ -399,11 +399,23 @@ async def process_channel_subscription(
     """Отправляет запрос на подписку через Redis и обрабатывает ответ"""
     user = current_user.get()
 
+    # Ограничиваем количество каналов за раз до 10
+    MAX_CHANNELS_PER_REQUEST = 10
+    excess_channels = []
+    channels_to_process = channel_links
+
+    if len(channel_links) > MAX_CHANNELS_PER_REQUEST:
+        channels_to_process = channel_links[:MAX_CHANNELS_PER_REQUEST]
+        excess_channels = channel_links[MAX_CHANNELS_PER_REQUEST:]
+        logger.info(
+            f"Пользователь {user.tg_user_id} отправил {len(channel_links)} ссылок"
+        )
+
     request_id = str(uuid.uuid4())
     subscribe_request = SubscribeChannelsMessage(
         request_id=request_id,
         user_id=user.tg_user_id,
-        channel_links=channel_links,
+        channel_links=channels_to_process,
     )
 
     status_message = None
@@ -434,6 +446,10 @@ async def process_channel_subscription(
 
         successful_channels = []
         failed_channels = []
+
+        # Добавляем избыточные каналы (больше 10) в failed_channels
+        for excess_link in excess_channels:
+            failed_channels.append(f"• {excess_link}")
 
         for result_data in response.results:
             result = ChannelResult(**result_data)
