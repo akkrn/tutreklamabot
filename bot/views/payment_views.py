@@ -233,30 +233,18 @@ async def _send_payment_notification_via_redis(
 
 
 @csrf_exempt
-@require_http_methods(["POST"])
+@require_http_methods(["GET"])
 def payment_fail(request):
     """Webhook для обработки fail-запросов от платежной системы."""
-    client_ip = request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[
-        0
-    ] or request.META.get("REMOTE_ADDR", "")
-
-    if not is_ip_allowed(client_ip):
-        logger.warning(
-            "Запрос с неразрешенного IP адреса",
-            ip=client_ip,
-            user_agent=request.META.get("HTTP_USER_AGENT", ""),
-        )
-        return HttpResponseBadRequest("IP not allowed")
-
-    inv_id = request.POST.get("InvId") or request.POST.get("inv_id")
-    message_id = request.POST.get("shp_message_id")
+    inv_id = request.GET.get("InvId") or request.GET.get("inv_id")
+    message_id = request.GET.get("shp_message_id")
 
     if not inv_id:
         logger.error(
             "Отсутствует обязательный параметр InvId/inv_id",
-            post_data=dict(request.POST),
+            get_data=dict(request.GET),
         )
-        return HttpResponseBadRequest("Missing InvId parameter")
+        return
 
     try:
         inv_id_int = int(inv_id)
@@ -265,7 +253,7 @@ def payment_fail(request):
             "Некорректный формат InvId",
             inv_id=inv_id,
         )
-        return HttpResponseBadRequest("Invalid InvId format")
+        return
 
     logger.info(
         "Получен fail-запрос для платежа",
@@ -273,14 +261,10 @@ def payment_fail(request):
         message_id=message_id,
     )
 
-    error_message = (
-        request.POST.get("error_message") or "Платеж не был выполнен"
-    )
-
+    error_message = request.GET.get("error_message") or "Платеж не был выполнен"
     if message_id:
         pass
     else:
-        # Нет message_id - это рекуррентный платеж, payment уже существует
         try:
             payment = Payment.objects.get(robokassa_invoice_id=inv_id_int)
         except Payment.DoesNotExist:
@@ -289,14 +273,26 @@ def payment_fail(request):
                 inv_id=inv_id_int,
             )
             return
+
+        # Если платеж уже успешно обработан, не меняем статус
+        if payment.status == Payment.STATUS_SUCCESS:
+            logger.info(
+                "Платеж уже успешно обработан, пропускаем fail-запрос",
+                payment_id=payment.id,
+                inv_id=inv_id_int,
+            )
+            return
+
+        # Обновляем статус платежа на failed
         payment.status = Payment.STATUS_FAILED
         payment.error_message = error_message
         payment.save()
 
         logger.info(
-            "Рекуррентный платеж отмечен как failed",
+            "Платеж отмечен как failed",
             payment_id=payment.id,
             inv_id=inv_id_int,
+            message_id=message_id,
+            error_message=error_message,
         )
-
     return
