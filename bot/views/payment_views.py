@@ -4,7 +4,11 @@ import ipaddress
 import structlog
 from asgiref.sync import sync_to_async
 from django.conf import settings
-from django.http import HttpResponse, HttpResponseBadRequest
+from django.http import (
+    HttpResponse,
+    HttpResponseBadRequest,
+    HttpResponseRedirect,
+)
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -236,6 +240,7 @@ async def _send_payment_notification_via_redis(
 @require_http_methods(["GET"])
 def payment_fail(request):
     """Webhook для обработки fail-запросов от платежной системы."""
+    TELEGRAM_BOT_URL = f"https://t.me/{settings.TELEGRAM_BOT_USERNAME}"
     inv_id = request.GET.get("InvId") or request.GET.get("inv_id")
     message_id = request.GET.get("shp_message_id")
 
@@ -244,7 +249,7 @@ def payment_fail(request):
             "Отсутствует обязательный параметр InvId/inv_id",
             get_data=dict(request.GET),
         )
-        return
+        return HttpResponseRedirect(TELEGRAM_BOT_URL)
 
     try:
         inv_id_int = int(inv_id)
@@ -253,7 +258,7 @@ def payment_fail(request):
             "Некорректный формат InvId",
             inv_id=inv_id,
         )
-        return
+        return HttpResponseRedirect(TELEGRAM_BOT_URL)
 
     logger.info(
         "Получен fail-запрос для платежа",
@@ -272,18 +277,8 @@ def payment_fail(request):
                 "Платеж не найден",
                 inv_id=inv_id_int,
             )
-            return
+            return HttpResponseRedirect(TELEGRAM_BOT_URL)
 
-        # Если платеж уже успешно обработан, не меняем статус
-        if payment.status == Payment.STATUS_SUCCESS:
-            logger.info(
-                "Платеж уже успешно обработан, пропускаем fail-запрос",
-                payment_id=payment.id,
-                inv_id=inv_id_int,
-            )
-            return
-
-        # Обновляем статус платежа на failed
         payment.status = Payment.STATUS_FAILED
         payment.error_message = error_message
         payment.save()
@@ -295,4 +290,5 @@ def payment_fail(request):
             message_id=message_id,
             error_message=error_message,
         )
-    return
+        return HttpResponse(f"OK{inv_id}", content_type="text/plain")
+    return HttpResponseRedirect(TELEGRAM_BOT_URL)
