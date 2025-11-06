@@ -391,6 +391,15 @@ async def handle_start_referrals(message: Message, user, args: str) -> None:
                 "При регистрации по реф ссылке не найден пользователь",
                 ref_user=ref_user,
             )
+    elif args_type == "ads":
+        user.ads_campaign = args_value
+        logger.info(
+            "Пользователь пришёл по рекламной ссылке",
+            user_id=user.id,
+            user_tg_id=user.telegram_user_id,
+            campaign=args_value,
+        )
+        await user.asave()
 
 
 async def process_channel_subscription(

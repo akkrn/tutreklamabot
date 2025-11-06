@@ -73,6 +73,13 @@ class User(models.Model):
     status_changed_at = models.DateTimeField(
         verbose_name="Дата смены статуса", null=True, blank=True
     )
+    ads_campaign = models.CharField(
+        verbose_name="Рекламная кампания",
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Рекламная кампания, по которой пришел пользователь",
+    )
 
     def get_display_name(self) -> str:
         """Возвращает @username, если он есть, иначе first_name."""
