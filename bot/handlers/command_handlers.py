@@ -396,7 +396,7 @@ async def handle_start_referrals(message: Message, user, args: str) -> None:
         logger.info(
             "Пользователь пришёл по рекламной ссылке",
             user_id=user.id,
-            user_tg_id=user.telegram_user_id,
+            user_tg_id=user.tg_user_id,
             campaign=args_value,
         )
         await user.asave()
